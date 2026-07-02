@@ -39,5 +39,11 @@ While “Green Harvest 2025” presents a coherent framework for enhancing agr
 
 query = "Considering the full set of Green Harvest 2025 policies, does the combined deployment of Aqua-Wheat-X1, precision irrigation sensors, and the Carbon Farm Credit scheme result in a net reduction of greenhouse-gas emissions (including CO2, CH4, and N2O) while simultaneously increasing total grain yield across all participating regions?"
 
-result = run_demo(db_path='demo.sqlite', query=query, raw_text=raw_text)
-print(json.dumps(result, indent=2))
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Run the local SVO verification script")
+    parser.add_argument("--run-mode", choices=["demo", "full"], default="demo", help="Choose 'demo' (mock DBs) or 'full' (real DBs)")
+    args = parser.parse_args()
+    
+    result = run_demo(db_path='demo.sqlite', query=query, raw_text=raw_text, run_mode=args.run_mode)
+    print(json.dumps(result, indent=2))

@@ -37,6 +37,31 @@ class MockSVOExtractor:
 
         return relations
 
+class MockConceptExtractor:
+    def extract_concepts(self, text: str) -> Dict[str, List[str]]:
+        lowered = text.lower()
+        provides = []
+        depends_on = []
+        
+        # Rule for Chunk 2: controller type is above the worker type
+        if "controller type" in lowered or "above the worker type" in lowered:
+            provides.append("hierarchy")
+            
+        # Rule for Chunk 9: resolution pathway is determined by its manager
+        if "resolution pathway" in lowered or "determined by its manager" in lowered:
+            provides.append("resolution pathway")
+            depends_on.append("hierarchy")
+            
+        # Standard mock fallback to keep it robust and backward compatible
+        if not provides and "hierarchy" in lowered:
+            provides.append("hierarchy")
+            
+        return {
+            "provides": provides,
+            "depends_on": depends_on
+        }
+
+
 class DataIngestor:
     def __init__(
         self,
@@ -45,7 +70,8 @@ class DataIngestor:
         milvus_collection,
         neo4j_driver,
         embedding_model,
-        svo_extractor
+        svo_extractor,
+        concept_extractor=None
     ):
         self.sqlite_path = sqlite_conn_path
         self.es_client = es_client
@@ -53,6 +79,12 @@ class DataIngestor:
         self.neo4j_driver = neo4j_driver
         self.embedding_model = embedding_model
         self.svo_extractor = svo_extractor
+        
+        if concept_extractor is None:
+            from concept_extractor import QwenConceptExtractor
+            self.concept_extractor = QwenConceptExtractor()
+        else:
+            self.concept_extractor = concept_extractor
         
     def chunk_document(self, document_id: str, raw_text: str) -> List[Chunk]:
         """
@@ -106,14 +138,20 @@ class DataIngestor:
             chunk.embedding = emb
         print("  -> Generated vector embeddings.")
             
-        # 3. SVO Extraction
+        # 3. SVO and Concept Extraction
         all_svos = []
         for chunk in chunks:
             extracted_svos = self.svo_extractor.extract(chunk.text)
             for svo in extracted_svos:
                 svo.source_chunk_ids = [chunk.chunk_id]
                 all_svos.append(svo)
-        print(f"  -> Extracted {len(all_svos)} SVO relations.")
+            
+            # Concept extraction
+            concepts = self.concept_extractor.extract_concepts(chunk.text)
+            chunk.metadata["provides"] = concepts["provides"]
+            chunk.metadata["depends_on"] = concepts["depends_on"]
+
+        print(f"  -> Extracted {len(all_svos)} SVO relations and concepts.")
 
         # 4. Write to SQLite (ChunkStore for late materialization)
         self._write_sqlite(chunks)
@@ -128,8 +166,8 @@ class DataIngestor:
         print("  -> Populated Milvus (Semantic Store).")
         
         # 7. Write to Neo4j (Graph Reasoning Store)
-        self._write_neo4j(all_svos)
-        print("  -> Populated Neo4j (Knowledge Graph Store).")
+        self._write_neo4j(chunks, all_svos)
+        print("  -> Populated Neo4j (Knowledge Graph Store with Chunk/Concept dependency graph and SVOs).")
         
         print(f"Successfully completed ingestion for {document_id}!")
         return {
@@ -162,23 +200,30 @@ class DataIngestor:
             conn.close()
 
     def _write_elasticsearch(self, chunks: List[Chunk]):
-        # Assuming es_client is from the official `elasticsearch` python package
-        actions = []
-        for c in chunks:
-            # Bulk API formatting
-            actions.append({
-                "index": {"_index": "svo_chunks", "_id": c.chunk_id}
-            })
-            actions.append({
-                "document_id": c.document_id,
-                "text": c.text,
-                "metadata": c.metadata
-            })
-        if actions:
+        if hasattr(self.es_client, "indices"):
             try:
-                self.es_client.bulk(operations=actions)
+                from ElasticSearch.es_helper import bulk_ingest_chunks
+                bulk_ingest_chunks(self.es_client, chunks)
             except Exception as e:
-                print(f"  [!] Elasticsearch write failed: {e}")
+                print(f"  [!] Production Elasticsearch write failed: {e}")
+        else:
+            # Mock client fallback
+            actions = []
+            for c in chunks:
+                # Bulk API formatting
+                actions.append({
+                    "index": {"_index": "svo_chunks", "_id": c.chunk_id}
+                })
+                actions.append({
+                    "document_id": c.document_id,
+                    "text": c.text,
+                    "metadata": c.metadata
+                })
+            if actions:
+                try:
+                    self.es_client.bulk(operations=actions)
+                except Exception as e:
+                    print(f"  [!] Mock Elasticsearch write failed: {e}")
 
     def _write_milvus(self, chunks: List[Chunk]):
         # PyMilvus insert format assuming the schema has fields: chunk_id (VarChar) and embedding (FloatVector)
@@ -196,45 +241,84 @@ class DataIngestor:
         except Exception as e:
             print(f"  [!] Milvus write failed: {e}")
 
-    def _write_neo4j(self, svos: List[SVORelation]):
+    def _write_neo4j(self, chunks: List[Chunk], svos: List[SVORelation] = None):
+        if not self.neo4j_driver:
+            print("  [!] Neo4j write skipped: No driver provided.")
+            return
         with self.neo4j_driver.session() as session:
-            for svo in svos:
-                # Sanitize the relation string to be a valid Cypher Relationship Label (A-Z, 0-9, _)
-                rel_label = re.sub(r'[^A-Z0-9_]', '_', svo.relation.upper())
-                if not rel_label:
-                    rel_label = "RELATED_TO"
-                    
-                # We use string formatting for the relationship label because Cypher does not 
-                # support parameterized relationship types natively without APOC procedures.
-                # The parameters (nodes and properties) are properly parameterized to prevent injection.
-                dynamic_cypher = f"""
-                MERGE (s:Entity {{id: $subject_id}})
-                ON CREATE SET s.name = $subject_name, s.type = $subject_type
-                
-                MERGE (o:Entity {{id: $object_id}})
-                ON CREATE SET o.name = $object_name, o.type = $object_type
-                
-                MERGE (s)-[r:{rel_label}]->(o)
-                ON CREATE SET r.relation_type = $relation, r.source_chunk_ids = $chunk_ids, r.weight = 1
-                
-                // Append unique chunk_ids if the relationship already exists
-                ON MATCH SET r.source_chunk_ids = [x IN r.source_chunk_ids WHERE NOT x IN $chunk_ids] + $chunk_ids, 
-                             r.weight = r.weight + 1
-                """
+            for chunk in chunks:
                 try:
+                    # Merge chunk node
                     session.run(
-                        dynamic_cypher,
-                        subject_id=svo.subject_id,
-                        subject_name=svo.subject_name_type,
-                        subject_type=svo.subject_name_type, # Simplification for mock
-                        object_id=svo.object_id,
-                        object_name=svo.object_name_type,
-                        object_type=svo.object_name_type,
-                        relation=svo.relation,
-                        chunk_ids=svo.source_chunk_ids
+                        """
+                        MERGE (c:Chunk {id: $chunk_id})
+                        SET c.text = $text, c.document_id = $document_id
+                        """,
+                        chunk_id=chunk.chunk_id,
+                        text=chunk.text,
+                        document_id=chunk.document_id
                     )
+                    
+                    # Merge PROVIDES concepts
+                    provides = chunk.metadata.get("provides", [])
+                    for cp in provides:
+                        session.run(
+                            """
+                            MERGE (c:Chunk {id: $chunk_id})
+                            MERGE (cp:Concept {name: $concept_name})
+                            MERGE (c)-[:PROVIDES]->(cp)
+                            """,
+                            chunk_id=chunk.chunk_id,
+                            concept_name=cp
+                        )
+                        
+                    # Merge DEPENDS_ON concepts
+                    depends_on = chunk.metadata.get("depends_on", [])
+                    for cp in depends_on:
+                        session.run(
+                            """
+                            MERGE (c:Chunk {id: $chunk_id})
+                            MERGE (cp:Concept {name: $concept_name})
+                            MERGE (c)-[:DEPENDS_ON]->(cp)
+                            """,
+                            chunk_id=chunk.chunk_id,
+                            concept_name=cp
+                        )
                 except Exception as e:
-                    print(f"  [!] Neo4j write failed for relation {svo.relation}: {e}")
+                    print(f"  [!] Neo4j write failed for chunk {chunk.chunk_id}: {e}")
+                    
+            if svos:
+                for svo in svos:
+                    try:
+                        # Ensure relation string is valid Cypher
+                        rel_type = svo.relation.replace(' ', '_').replace('-', '_').upper()
+                        session.run(
+                            f"""
+                            MERGE (s:Entity {{id: $subject_id}})
+                            SET s.name = $subject_name
+                            MERGE (o:Entity {{id: $object_id}})
+                            SET o.name = $object_name
+                            MERGE (s)-[r:`{rel_type}`]->(o)
+                            """,
+                            subject_id=svo.subject_id,
+                            subject_name=svo.subject_name_type,
+                            object_id=svo.object_id,
+                            object_name=svo.object_name_type
+                        )
+                        for cid in svo.source_chunk_ids:
+                            session.run(
+                                f"""
+                                MATCH (s:Entity {{id: $subject_id}})-[:`{rel_type}`]->(o:Entity {{id: $object_id}})
+                                MATCH (c:Chunk {{id: $chunk_id}})
+                                MERGE (c)-[:MENTIONS_RELATION]->(s)
+                                MERGE (c)-[:MENTIONS_RELATION]->(o)
+                                """,
+                                subject_id=svo.subject_id,
+                                object_id=svo.object_id,
+                                chunk_id=cid
+                            )
+                    except Exception as e:
+                        print(f"  [!] Neo4j write failed for SVO {svo.subject_id}-{svo.relation}-{svo.object_id}: {e}")
 
 class SimpleEmbeddingModel:
     def encode(self, texts):
@@ -368,14 +452,47 @@ class LocalNeo4jDriver:
         return None
 
 
-def run_demo(document_id: str = "demo_doc", raw_text: str = "Aspirin treats headache and reduces pain.", db_path: str = "svo_data.db"):
+def run_demo(document_id: str = "demo_doc", raw_text: str = "Aspirin treats headache and reduces pain.", db_path: str = "svo_data.db", run_mode: str = "demo"):
+    if run_mode == "full":
+        try:
+            from neo4j_helper import get_neo4j_driver, initialize_neo4j_schema
+            driver = get_neo4j_driver()
+            initialize_neo4j_schema(driver)
+        except ImportError:
+            print("Error: Could not import 'neo4j' library. Please run 'pip install neo4j'.")
+            driver = LocalNeo4jDriver()
+
+        try:
+            from ElasticSearch.es_helper import get_elasticsearch_client
+            es_client = get_elasticsearch_client()
+        except ImportError:
+            print("Error: Could not import 'elasticsearch' library. Please run 'pip install elasticsearch'.")
+            es_client = LocalElasticsearchClient()
+
+        embedding_model = SimpleEmbeddingModel()
+        dummy_emb = embedding_model.encode(["test"])
+        emb_dim = len(dummy_emb[0]) if dummy_emb else 5
+
+        try:
+            from milvus_helper import get_milvus_collection
+            milvus_collection = get_milvus_collection(dim=emb_dim)
+        except ImportError:
+            print("Error: Could not import 'pymilvus' library. Please run 'pip install pymilvus'.")
+            milvus_collection = LocalMilvusCollection()
+    else:
+        driver = LocalNeo4jDriver()
+        es_client = LocalElasticsearchClient()
+        milvus_collection = LocalMilvusCollection()
+        embedding_model = SimpleEmbeddingModel()
+
     ingestor = DataIngestor(
         sqlite_conn_path=db_path,
-        es_client=LocalElasticsearchClient(),
-        milvus_collection=LocalMilvusCollection(),
-        neo4j_driver=LocalNeo4jDriver(),
-        embedding_model=SimpleEmbeddingModel(),
+        es_client=es_client,
+        milvus_collection=milvus_collection,
+        neo4j_driver=driver,
+        embedding_model=embedding_model,
         svo_extractor=MockSVOExtractor(),
+        concept_extractor=MockConceptExtractor(),
     )
     result = ingestor.ingest_document(document_id, raw_text)
     return result
@@ -388,7 +505,15 @@ if __name__ == "__main__":
     parser.add_argument("--document-id", default="demo_doc")
     parser.add_argument("--db-path", default="svo_data.db")
     parser.add_argument("--text", default="Aspirin treats headache and reduces pain.")
+    parser.add_argument("--run-mode", choices=["demo", "full"], default="demo", help="Choose 'demo' (uses mock db clients) or 'full' (uses real Neo4j database)")
     args = parser.parse_args()
 
-    result = run_demo(document_id=args.document_id, raw_text=args.text, db_path=args.db_path)
+    result = run_demo(
+        document_id=args.document_id,
+        raw_text=args.text,
+        db_path=args.db_path,
+        run_mode=args.run_mode
+    )
     print(json.dumps(result, indent=2))
+
+

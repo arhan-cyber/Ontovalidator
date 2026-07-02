@@ -178,15 +178,13 @@ class GraphRetriever(BaseRetriever):
         results = []
         
         # Cypher query: 
-        # 1. Finds entry nodes matching the query text.
-        # 2. Traverses up to max_hops.
-        # 3. Extracts the source_chunk_ids from the edges (relationships).
-        # 4. Decays the score based on path length (0.8 ^ (length-1)).
+        # 1. Finds entry Concept nodes matching the query text.
+        # 2. Traverses PROVIDES or DEPENDS_ON relations up to max_hops to reach Chunk nodes.
+        # 3. Decays the score based on path length (0.8 ^ (length-1)).
         cypher_query = f"""
-        CALL db.index.fulltext.queryNodes("entity_name_index", $query) YIELD node, score
-        MATCH path = (node)-[*1..{max_hops}]-(connected)
-        UNWIND relationships(path) AS r
-        RETURN DISTINCT r.source_chunk_ids AS chunk_ids, score * (0.8 ^ (length(path)-1)) AS path_score
+        CALL db.index.fulltext.queryNodes("concept_name_index", $query) YIELD node, score
+        MATCH path = (node)-[:PROVIDES|DEPENDS_ON*1..{max_hops}]-(c:Chunk)
+        RETURN DISTINCT c.id AS chunk_id, score * (0.8 ^ (length(path)-1)) AS path_score
         ORDER BY path_score DESC
         LIMIT $top_k
         """
@@ -196,21 +194,18 @@ class GraphRetriever(BaseRetriever):
                 records = session.run(cypher_query, query=query, top_k=top_k)
                 
                 for record in records:
-                    chunk_ids = record["chunk_ids"]
+                    chunk_id = record["chunk_id"]
                     path_score = record["path_score"]
                     
-                    if chunk_ids:
-                        for cid in chunk_ids:
-                            results.append(RetrievalResult(
-                                chunk_id=cid,
-                                score=float(path_score),
-                                source="graph"
-                            ))
-                            
-                            if len(results) >= top_k:
-                                break
-                    if len(results) >= top_k:
-                        break
+                    if chunk_id:
+                        results.append(RetrievalResult(
+                            chunk_id=chunk_id,
+                            score=float(path_score),
+                            source="graph"
+                        ))
+                        
+                        if len(results) >= top_k:
+                            break
         except Exception as e:
             print(f"Graph retrieval failed: {e}")
             
@@ -491,44 +486,144 @@ class SQLiteGraphRetriever(BaseRetriever):
     def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def retrieve(self, query: str, top_k: int) -> List[RetrievalResult]:
+    def retrieve(self, query: str, top_k: int, max_hops: int = 3) -> List[RetrievalResult]:
         query_tokens = set(re.findall(r"\w+", query.lower()))
         if not query_tokens:
             return []
 
         conn = sqlite3.connect(self.db_path)
         try:
-            rows = conn.execute("SELECT chunk_id, text FROM chunks").fetchall()
+            rows = conn.execute("SELECT chunk_id, text, metadata FROM chunks").fetchall()
+        except sqlite3.OperationalError:
+            try:
+                rows = [(r[0], r[1], None) for r in conn.execute("SELECT chunk_id, text FROM chunks").fetchall()]
+            except Exception:
+                rows = []
         finally:
             conn.close()
 
-        scored = []
-        for chunk_id, text in rows:
-            text_tokens = set(re.findall(r"\w+", text.lower()))
-            overlap = len(query_tokens & text_tokens)
-            if overlap:
-                scored.append((overlap, chunk_id))
+        # Parse chunks and build an in-memory concept graph to simulate Neo4j
+        chunks_map = {}
+        concept_to_providers = {}
+        concept_to_dependents = {}
 
-        scored.sort(reverse=True)
-        return [
-            RetrievalResult(chunk_id=chunk_id, score=float(score) * 0.9, source="graph")
-            for score, chunk_id in scored[:top_k]
+        for chunk_id, text, metadata_json in rows:
+            try:
+                metadata = json.loads(metadata_json) if metadata_json else {}
+            except Exception:
+                metadata = {}
+            
+            provides = metadata.get("provides", [])
+            depends_on = metadata.get("depends_on", [])
+            
+            chunks_map[chunk_id] = {
+                "chunk_id": chunk_id,
+                "text": text,
+                "provides": provides,
+                "depends_on": depends_on
+            }
+            
+            for cp in provides:
+                concept_to_providers.setdefault(cp.lower(), []).append(chunk_id)
+            for cp in depends_on:
+                concept_to_dependents.setdefault(cp.lower(), []).append(chunk_id)
+
+        # Find initial concepts matching query tokens
+        matched_concepts = []
+        for cp in list(concept_to_providers.keys()) + list(concept_to_dependents.keys()):
+            if cp in query.lower() or any(token in cp for token in query_tokens):
+                matched_concepts.append(cp)
+
+        visited_chunks = {}
+        for cp in matched_concepts:
+            # Direct providers and dependents (distance 1)
+            connected = set(concept_to_providers.get(cp, []) + concept_to_dependents.get(cp, []))
+            for cid in connected:
+                visited_chunks[cid] = max(visited_chunks.get(cid, 0.0), 1.0)
+                
+            # Simulate paths up to max_hops
+            for hop in range(1, max_hops):
+                next_connected = set()
+                for cid in connected:
+                    cdata = chunks_map.get(cid)
+                    if not cdata:
+                        continue
+                    all_chunk_concepts = cdata["provides"] + cdata["depends_on"]
+                    for c_name in all_chunk_concepts:
+                        c_name_lower = c_name.lower()
+                        others = concept_to_providers.get(c_name_lower, []) + concept_to_dependents.get(c_name_lower, [])
+                        for other_id in others:
+                            if other_id != cid:
+                                next_connected.add(other_id)
+                
+                score_decay = 0.8 ** hop
+                for cid in next_connected:
+                    visited_chunks[cid] = max(visited_chunks.get(cid, 0.0), score_decay)
+                connected = next_connected
+
+        # If we got no concept hits, fallback to basic keyword overlapping to prevent breaking standard tests
+        if not visited_chunks:
+            scored = []
+            for chunk_id, text, _ in rows:
+                text_tokens = set(re.findall(r"\w+", text.lower()))
+                overlap = len(query_tokens & text_tokens)
+                if overlap:
+                    scored.append((overlap, chunk_id))
+            scored.sort(reverse=True)
+            return [
+                RetrievalResult(chunk_id=chunk_id, score=float(score) * 0.9, source="graph")
+                for score, chunk_id in scored[:top_k]
+            ]
+
+        # Sort and return RetrievalResult
+        results = [
+            RetrievalResult(chunk_id=cid, score=score, source="graph")
+            for cid, score in visited_chunks.items()
         ]
+        results.sort(key=lambda x: x.score, reverse=True)
+        return results[:top_k]
 
 
-def run_demo(db_path: str = "svo_data.db", query: str = "What treats headache?", raw_text: Optional[str] = None):
+def run_demo(db_path: str = "svo_data.db", query: str = "What treats headache?", raw_text: Optional[str] = None, run_mode: str = "demo"):
     from ingestion_pipeline import run_demo as run_ingestion_demo
 
     document_text = raw_text or (
         "Aspirin treats headache and reduces pain. "
         "The medication is commonly used for migraines and fever."
     )
-    ingestion_result = run_ingestion_demo(db_path=db_path, raw_text=document_text)
+    ingestion_result = run_ingestion_demo(db_path=db_path, raw_text=document_text, run_mode=run_mode)
+    
+    if run_mode == "full":
+        try:
+            from neo4j_helper import get_neo4j_driver
+            driver = get_neo4j_driver()
+            graph_store = GraphRetriever(driver)
+        except ImportError:
+            graph_store = SQLiteGraphRetriever(db_path)
+            
+        try:
+            from ElasticSearch.es_helper import get_elasticsearch_client
+            es_client = get_elasticsearch_client()
+            lexical_store = LexicalRetriever(es_client)
+        except ImportError:
+            lexical_store = SQLiteLexicalRetriever(db_path)
+            
+        try:
+            from ingestion_pipeline import SimpleEmbeddingModel
+            embedding_model = SimpleEmbeddingModel()
+            semantic_store = MilvusSemanticRetriever("svo_chunks", embedding_model)
+        except ImportError:
+            semantic_store = SQLiteSemanticRetriever(db_path)
+    else:
+        lexical_store = SQLiteLexicalRetriever(db_path)
+        semantic_store = SQLiteSemanticRetriever(db_path)
+        graph_store = SQLiteGraphRetriever(db_path)
+
     engine = SVOVerificationEngine(
         router=MoERouter(),
-        lexical_store=SQLiteLexicalRetriever(db_path),
-        semantic_store=SQLiteSemanticRetriever(db_path),
-        graph_store=SQLiteGraphRetriever(db_path),
+        lexical_store=lexical_store,
+        semantic_store=semantic_store,
+        graph_store=graph_store,
         fusion_engine=WeightedFusionEngine(),
         chunk_store=SQLiteChunkStore(db_path),
         validator=MinimalValidator(),
@@ -594,7 +689,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the local SVO verification demo")
     parser.add_argument("--db-path", default="svo_data.db")
     parser.add_argument("--query", default="What treats headache?")
+    parser.add_argument("--run-mode", choices=["demo", "full"], default="demo", help="Choose 'demo' (uses mock db clients) or 'full' (uses real databases)")
     args = parser.parse_args()
 
-    result = run_demo(db_path=args.db_path, query=args.query)
+    result = run_demo(db_path=args.db_path, query=args.query, run_mode=args.run_mode)
     print(json.dumps(result, indent=2))

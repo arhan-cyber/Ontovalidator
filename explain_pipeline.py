@@ -140,22 +140,16 @@ def run_step_by_step_pipeline():
     print("\n  [Action] Populating Neo4j (Graph Reasoning Store)...")
     # Show Neo4j Cypher and parameters
     print("    - [Payload] Neo4j graph nodes and relations to merge:")
-    for svo in all_svos:
-        import re
-        rel_label = re.sub(r'[^A-Z0-9_]', '_', svo.relation.upper()) or "RELATED_TO"
-        params = {
-            "subject_id": svo.subject_id,
-            "subject_name": svo.subject_name_type,
-            "subject_type": svo.subject_name_type,
-            "object_id": svo.object_id,
-            "object_name": svo.object_name_type,
-            "object_type": svo.object_name_type,
-            "relation": svo.relation,
-            "chunk_ids": svo.source_chunk_ids
-        }
-        print(f"      * Cypher Statement: MERGE (s:Entity {{id: $subject_id}}) -[r:{rel_label}]-> (o:Entity {{id: $object_id}})")
-        print(f"        Parameters: {json.dumps(params, indent=10)}")
-    ingestor._write_neo4j(all_svos)
+    for chunk in chunks:
+        provides = chunk.metadata.get("provides", [])
+        depends_on = chunk.metadata.get("depends_on", [])
+        print(f"      * Chunk ID: {chunk.chunk_id}")
+        print(f"        Text: \"{chunk.text}\"")
+        if provides:
+            print(f"        PROVIDES Concepts: {provides}")
+        if depends_on:
+            print(f"        DEPENDS_ON Concepts: {depends_on}")
+    ingestor._write_neo4j(chunks)
     print("    - [OUTPUT] Neo4j Graph Store populated successfully.")
 
     print("\n" + "=" * 80)

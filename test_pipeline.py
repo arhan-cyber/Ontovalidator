@@ -88,6 +88,57 @@ class PipelineDemoTests(unittest.TestCase):
             # Thus, the graph store and retrievers won't have any matching SVO structures for treats malaria.
             self.assertFalse(has_malaria_evidence, "Should not find any positive SVO evidence for treating malaria")
 
+    def test_concept_dependency_multi_hop_reasoning(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "concept_multi_hop.sqlite")
+            
+            # The document contains two key sentences that will end up in separate chunks
+            document_text = (
+                "Controller type is above the worker type. "
+                "The worker resolution pathway is determined by its manager."
+            )
+            
+            from svo_engine import SVOVerificationEngine, MoERouter, SQLiteLexicalRetriever, SQLiteSemanticRetriever, SQLiteGraphRetriever, WeightedFusionEngine, SQLiteChunkStore, MinimalValidator
+            from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
+            
+            # Ingest document to populate SQLite (which contains chunk metadata with concepts)
+            ingestor = DataIngestor(
+                sqlite_conn_path=db_path,
+                es_client=None, # mock ES bulk is handled or unused here
+                milvus_collection=None,
+                neo4j_driver=None, # Mock Neo4j driver not needed for SQLite simulation
+                embedding_model=SimpleEmbeddingModel(),
+                svo_extractor=MockSVOExtractor(),
+                concept_extractor=MockConceptExtractor(),
+            )
+            ingestor.ingest_document("doc_concept_test", document_text)
+            
+            engine = SVOVerificationEngine(
+                router=MoERouter(),
+                lexical_store=SQLiteLexicalRetriever(db_path),
+                semantic_store=SQLiteSemanticRetriever(db_path),
+                graph_store=SQLiteGraphRetriever(db_path),
+                fusion_engine=WeightedFusionEngine(),
+                chunk_store=SQLiteChunkStore(db_path),
+                validator=MinimalValidator(),
+            )
+            
+            # This query contains "pathway" and "connects", routing it to MULTI_HOP
+            query = "What connects resolution pathway to hierarchy?"
+            verification = engine.verify(query, top_k=5)
+            evidence = verification.get("evidence", [])
+            
+            # Check that we routed to MULTI_HOP and retrieved both chunk 2 (hierarchy) and chunk 9 (pathway)
+            # because they are linked through the "hierarchy" concept!
+            self.assertGreaterEqual(len(evidence), 2)
+            
+            retrieved_texts = [ev["text"].lower() for ev in evidence if ev["text"]]
+            has_chunk2 = any("controller type" in t for t in retrieved_texts)
+            has_chunk9 = any("resolution pathway" in t for t in retrieved_texts)
+            
+            self.assertTrue(has_chunk2, "Should retrieve Chunk 2 containing the 'hierarchy' concept definition.")
+            self.assertTrue(has_chunk9, "Should retrieve Chunk 9 containing the 'resolution pathway' concept dependent on 'hierarchy'.")
+
 
 if __name__ == "__main__":
     unittest.main()
