@@ -2,30 +2,43 @@ import os
 import tempfile
 import unittest
 import json
+import shutil
+import uuid
+from contextlib import contextmanager
 
 from ingestion_pipeline import run_demo as run_ingestion_demo
 from svo_engine import run_demo as run_svo_demo
+
+
+@contextmanager
+def workspace_tmpdir():
+    path = os.path.abspath(os.path.join(os.getcwd(), f".tmp_test_{uuid.uuid4().hex}"))
+    os.makedirs(path, exist_ok=True)
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
 
 
 class PipelineDemoTests(unittest.TestCase):
     """Basic smoke tests using demo mode with mocks."""
 
     def test_ingestion_demo_runs(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "demo.sqlite")
             result = run_ingestion_demo(db_path=db_path)
             self.assertTrue(result["status"] == "SUCCESS")
             self.assertIn("chunks", result)
 
     def test_svo_engine_demo_runs(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "demo.sqlite")
             result = run_svo_demo(db_path=db_path)
             self.assertTrue(result["status"] == "SUCCESS")
             self.assertIn("verification", result)
 
     def test_cross_chunk_reasoning_demo(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "cross_chunk.sqlite")
             document_text = (
                 "Aspirin treats headache. "
@@ -38,7 +51,7 @@ class PipelineDemoTests(unittest.TestCase):
 
 
     def test_long_text_and_svo_validation(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "long_text.sqlite")
 
             # Multi-paragraph, multi-chunk document
@@ -92,7 +105,7 @@ class PipelineDemoTests(unittest.TestCase):
             self.assertFalse(has_malaria_evidence, "Should not find any positive SVO evidence for treating malaria")
 
     def test_concept_dependency_multi_hop_reasoning(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "concept_multi_hop.sqlite")
 
             # The document contains two key sentences that will end up in separate chunks
@@ -213,7 +226,7 @@ class RetrieverAccuracyTests(unittest.TestCase):
 
     def test_lexical_retriever_exact_match(self):
         """Verify lexical retriever finds exact keyword matches."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "test.sqlite")
             from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
             from svo_engine import SQLiteLexicalRetriever
@@ -239,7 +252,7 @@ class RetrieverAccuracyTests(unittest.TestCase):
 
     def test_semantic_retriever_similarity(self):
         """Verify semantic retriever works with Jaccard similarity."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "test.sqlite")
             from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
             from svo_engine import SQLiteSemanticRetriever
@@ -264,7 +277,7 @@ class RetrieverAccuracyTests(unittest.TestCase):
 
     def test_graph_retriever_concept_paths(self):
         """Verify graph retriever finds chunks through concept dependencies."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "test.sqlite")
             from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
             from svo_engine import SQLiteGraphRetriever
@@ -408,7 +421,7 @@ class ValidatorTests(unittest.TestCase):
     def test_transformer_validator_availability(self):
         """Check if TransformerValidator can be instantiated."""
         try:
-            from svo_engine import TransformerValidator, RetrievalResult, Chunk
+            from svo_engine import TransformerValidator, OntologyAssertion, RetrievalResult, Chunk
 
             validator = TransformerValidator()
             results = [
@@ -429,10 +442,71 @@ class ValidatorTests(unittest.TestCase):
             output = validator.validate("What treats headache?", results)
             self.assertEqual(output["status"], "EVIDENCE_VALIDATED")
             self.assertIn("evidence", output)
-            # Should have NLI labels
             self.assertIn("nli_label", output["evidence"][0])
+
+            ontology_output = validator.validate(
+                "Check ontology constraint",
+                results,
+                ontology_assertions=[
+                    OntologyAssertion(
+                        assertion_id="rule_1",
+                        subject="Aspirin",
+                        relation="treats",
+                        object="headache"
+                    )
+                ]
+            )
+            self.assertIn(ontology_output["status"], {"ONTOLOGY_VALIDATED", "ONTOLOGY_VALIDATION_OK"})
+            self.assertIn("violations", ontology_output)
         except ImportError:
             self.skipTest("transformers library not installed")
+
+
+class OntologyValidationTests(unittest.TestCase):
+    """Tests for ontology-aware violation reporting."""
+
+    def test_ontology_violation_detection(self):
+        from svo_engine import OntologyViolationValidator, OntologyAssertion, RetrievalResult, Chunk
+
+        validator = OntologyViolationValidator()
+        results = [
+            RetrievalResult(
+                chunk_id="c1",
+                score=0.9,
+                source="lexical",
+                chunk=Chunk(
+                    chunk_id="c1",
+                    document_id="doc1",
+                    text="Aspirin does not treat headache.",
+                    embedding=None,
+                    metadata={}
+                )
+            ),
+        ]
+        output = validator.validate(
+            "Ontology check",
+            results,
+            ontology_assertions=[
+                OntologyAssertion(
+                    assertion_id="a1",
+                    subject="Aspirin",
+                    relation="treat",
+                    object="headache",
+                    polarity="must_hold"
+                )
+            ]
+        )
+
+        self.assertIn(output["status"], {"ONTOLOGY_VALIDATED", "ONTOLOGY_VALIDATION_OK"})
+        self.assertGreaterEqual(len(output["violations"]), 1)
+        self.assertEqual(output["violations"][0]["chunk_id"], "c1")
+        self.assertIn(output["violations"][0]["violation_type"], {"contradiction", "partial_match", "candidate_violation"})
+
+    def test_router_detects_ontology_language(self):
+        from svo_engine import MoERouter, QueryType
+        router = MoERouter()
+        routes = router.route("Check for ontology rule violations and inconsistencies")
+        self.assertIn(QueryType.ONTOLOGY, routes)
 
 
 class EndToEndIntegrationTests(unittest.TestCase):
@@ -440,7 +514,7 @@ class EndToEndIntegrationTests(unittest.TestCase):
 
     def test_full_pipeline_with_custom_document(self):
         """Test complete pipeline from ingestion to verification."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "integration.sqlite")
 
             from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
@@ -482,9 +556,53 @@ class EndToEndIntegrationTests(unittest.TestCase):
             evidence = verify_result.get("evidence", [])
             self.assertGreater(len(evidence), 0)
 
+    def test_ontology_pipeline_with_optional_assertions(self):
+        with workspace_tmpdir() as tmpdir:
+            db_path = os.path.join(tmpdir, "ontology.sqlite")
+
+            from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
+            from svo_engine import SVOVerificationEngine, MoERouter, SQLiteLexicalRetriever, SQLiteSemanticRetriever, SQLiteGraphRetriever, WeightedFusionEngine, SQLiteChunkStore, OntologyViolationValidator, OntologyAssertion
+
+            ingestor = DataIngestor(
+                sqlite_conn_path=db_path,
+                es_client=None,
+                milvus_collection=None,
+                neo4j_driver=None,
+                embedding_model=SimpleEmbeddingModel(),
+                svo_extractor=MockSVOExtractor(),
+                concept_extractor=MockConceptExtractor(),
+            )
+            ingestor.ingest_document("doc", "Aspirin does not treat headache.")
+
+            engine = SVOVerificationEngine(
+                router=MoERouter(),
+                lexical_store=SQLiteLexicalRetriever(db_path),
+                semantic_store=SQLiteSemanticRetriever(db_path),
+                graph_store=SQLiteGraphRetriever(db_path),
+                fusion_engine=WeightedFusionEngine(),
+                chunk_store=SQLiteChunkStore(db_path),
+                validator=OntologyViolationValidator(),
+            )
+
+            output = engine.verify_with_ontology(
+                "Ontology check",
+                top_k=5,
+                ontology_assertions=[
+                    OntologyAssertion(
+                        assertion_id="rule_aspirin_headache",
+                        subject="Aspirin",
+                        relation="treat",
+                        object="headache",
+                        polarity="must_hold"
+                    )
+                ]
+            )
+            self.assertIn("violations", output)
+            self.assertGreaterEqual(len(output["violations"]), 1)
+
     def test_edge_case_empty_query(self):
         """Test retrieval with empty or minimal query."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with workspace_tmpdir() as tmpdir:
             db_path = os.path.join(tmpdir, "edge_case.sqlite")
 
             from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor

@@ -5,6 +5,7 @@ from enum import Enum
 import re
 import sqlite3
 import json
+from collections import Counter
 
 # --- Data Models ---
 
@@ -32,12 +33,32 @@ class RetrievalResult:
     source: str # 'lexical', 'semantic', 'graph'
     chunk: Optional[Chunk] = None 
 
+@dataclass
+class OntologyAssertion:
+    assertion_id: str
+    subject: str
+    relation: str
+    object: str
+    polarity: str = "must_hold"
+    rule_type: str = "constraint"
+
+@dataclass
+class ViolationRecord:
+    assertion_id: str
+    chunk_id: str
+    violation_type: str
+    confidence: float
+    evidence: str
+    matched_text: str
+    source: str = "validator"
+
 # --- Enums ---
 
 class QueryType(Enum):
     EXACT_MATCH = "exact_match"
     COMPLEX = "complex"
     MULTI_HOP = "multi_hop"
+    ONTOLOGY = "ontology"
 
 # --- MoE Router ---
 
@@ -50,6 +71,7 @@ class MoERouter(QueryRouter):
     def route(self, query: str) -> List[QueryType]:
         query_lower = query.lower()
         routes = set()
+        ontology_keywords = ["violat", "contradict", "inconsistent", "must", "required", "forbidden", "constraint", "rule"]
         
         # 1. Multi-hop / Structural Priority
         multi_hop_keywords = ["indirectly", "through", "via", "intermediate", "path", "connects"]
@@ -65,8 +87,12 @@ class MoERouter(QueryRouter):
         # Look for explicit quoted exact phrases or distinct ID-like strings (e.g., CHEMBL123)
         if re.search(r'".+"', query) or re.search(r'\b[A-Z0-9_-]{5,}\b', query):
             routes.add(QueryType.EXACT_MATCH)
+
+        # 4. Ontology / Violation Priority
+        if any(kw in query_lower for kw in ontology_keywords):
+            routes.add(QueryType.ONTOLOGY)
             
-        # 4. Fallback Strategy
+        # 5. Fallback Strategy
         if not routes:
             # Default to a hybrid Semantic and Lexical search for general queries
             routes.add(QueryType.COMPLEX)
@@ -230,7 +256,8 @@ class WeightedFusionEngine(FusionEngine):
                 chunk_data[res.chunk_id] = {"lexical": 0.0, "semantic": 0.0, "graph": 0.0, "sources": set()}
             
             # Keep highest score if there are duplicates from the same source
-            chunk_data[res.chunk_id][res.source] = max(chunk_data[res.chunk_id][res.source], res.score)
+            source_key = res.source if res.source in {"lexical", "semantic", "graph"} else "lexical"
+            chunk_data[res.chunk_id][source_key] = max(chunk_data[res.chunk_id][source_key], res.score)
             chunk_data[res.chunk_id]["sources"].add(res.source)
             
         # Extract lexical scores for Min-Max normalization
@@ -344,11 +371,21 @@ class SQLiteChunkStore(ChunkStore):
 
 class EvidenceValidator(ABC):
     @abstractmethod
-    def validate(self, query: str, results: List[RetrievalResult]) -> Dict[str, Any]:
+    def validate(
+        self,
+        query: str,
+        results: List[RetrievalResult],
+        ontology_assertions: Optional[List[OntologyAssertion]] = None
+    ) -> Dict[str, Any]:
         pass
 
 class MinimalValidator(EvidenceValidator):
-    def validate(self, query: str, results: List[RetrievalResult]) -> Dict[str, Any]:
+    def validate(
+        self,
+        query: str,
+        results: List[RetrievalResult],
+        ontology_assertions: Optional[List[OntologyAssertion]] = None
+    ) -> Dict[str, Any]:
         """
         A minimal validator that skips LLM evaluation and simply returns 
         the ranked chunks, their scores, and why they were retrieved.
@@ -382,41 +419,132 @@ class TransformerValidator(EvidenceValidator):
         model = AutoModelForSequenceClassification.from_pretrained(model_name)
         self.classifier = pipeline("zero-shot-classification", model=model, tokenizer=tokenizer)
 
-    def validate(self, query: str, results: List[RetrievalResult]) -> Dict[str, Any]:
+    def validate(
+        self,
+        query: str,
+        results: List[RetrievalResult],
+        ontology_assertions: Optional[List[OntologyAssertion]] = None
+    ) -> Dict[str, Any]:
+        if ontology_assertions:
+            return OntologyViolationValidator(self.classifier).validate(query, results, ontology_assertions)
+
         ranked_evidence = []
         for i, res in enumerate(results):
             chunk_text = res.chunk.text if res.chunk else ""
             if chunk_text:
                 try:
                     labels = ["supports", "refutes", "is neutral to"]
-                    # Map the query into statement format for NLI hypothesis matching
                     hypothesis = f"This text {{}} the claim: {query}"
                     res_cls = self.classifier(chunk_text, candidate_labels=labels, hypothesis_template=hypothesis)
-                    best_label = res_cls['labels'][0]
-                    confidence = res_cls['scores'][0]
+                    best_label = res_cls["labels"][0]
+                    confidence = res_cls["scores"][0]
                 except Exception as e:
                     best_label = f"error: {str(e)}"
                     confidence = 0.0
             else:
                 best_label = "neutral"
                 confidence = 0.0
-                
-            evidence_data = {
+
+            ranked_evidence.append({
                 "rank": i + 1,
                 "chunk_id": res.chunk_id,
                 "score": round(res.score, 4),
-                "retrieval_source": res.source, 
+                "retrieval_source": res.source,
                 "text": chunk_text,
                 "nli_label": best_label,
                 "confidence": round(confidence, 4)
-            }
-            ranked_evidence.append(evidence_data)
-            
+            })
+
         return {
             "query": query,
             "status": "EVIDENCE_VALIDATED",
             "message": "Evaluated ranked chunks using zero-shot NLI transformer.",
             "evidence": ranked_evidence
+        }
+
+
+class OntologyViolationValidator(EvidenceValidator):
+    def __init__(self, classifier=None):
+        self.classifier = classifier
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", text.lower()).strip()
+
+    def _score_violation(self, assertion: OntologyAssertion, chunk: Chunk) -> tuple[str, float, str]:
+        text = self._normalize(chunk.text)
+        subject = self._normalize(assertion.subject)
+        relation = self._normalize(assertion.relation)
+        obj = self._normalize(assertion.object)
+        has_subject = subject and subject in text
+        has_object = obj and obj in text
+        has_relation = relation and relation in text
+        negation = any(token in text for token in [" not ", "no ", "without ", "never ", "fails to", "does not", "cannot"])
+        if has_subject and has_relation and has_object:
+            if negation or assertion.polarity in {"forbidden", "must_not_hold"}:
+                return "contradiction", 0.94, "Matched assertion but found explicit negation or forbidden polarity."
+            return "satisfied", 0.9, "Matched assertion text directly."
+        if has_subject and has_relation:
+            return "partial_match", 0.65, "Subject and relation matched but object was missing."
+        if has_subject or has_object:
+            return "candidate_violation", 0.5, "Only a partial ontology match was found."
+        return "unmatched", 0.2, "No direct assertion match found in the chunk."
+
+    def validate(
+        self,
+        query: str,
+        results: List[RetrievalResult],
+        ontology_assertions: Optional[List[OntologyAssertion]] = None
+    ) -> Dict[str, Any]:
+        assertions = ontology_assertions or []
+        violators: List[ViolationRecord] = []
+        evidence: List[Dict[str, Any]] = []
+
+        if not assertions:
+            return {
+                "query": query,
+                "status": "ONTOLOGY_VALIDATION_SKIPPED",
+                "message": "No ontology assertions were provided.",
+                "violations": [],
+                "evidence": []
+            }
+
+        for res in results:
+            chunk = res.chunk
+            if not chunk:
+                continue
+            for assertion in assertions:
+                violation_type, confidence, evidence_text = self._score_violation(assertion, chunk)
+                if violation_type in {"contradiction", "partial_match", "candidate_violation"}:
+                    violators.append(ViolationRecord(
+                        assertion_id=assertion.assertion_id,
+                        chunk_id=chunk.chunk_id,
+                        violation_type=violation_type,
+                        confidence=confidence,
+                        evidence=evidence_text,
+                        matched_text=chunk.text,
+                        source=res.source
+                    ))
+
+        violators.sort(key=lambda v: v.confidence, reverse=True)
+        for rank, v in enumerate(violators, start=1):
+            evidence.append({
+                "rank": rank,
+                "assertion_id": v.assertion_id,
+                "chunk_id": v.chunk_id,
+                "violation_type": v.violation_type,
+                "confidence": round(v.confidence, 4),
+                "source": v.source,
+                "evidence": v.evidence,
+                "text": v.matched_text
+            })
+
+        return {
+            "query": query,
+            "status": "ONTOLOGY_VALIDATED" if evidence else "ONTOLOGY_VALIDATION_OK",
+            "message": "Ontology assertions were checked against ranked evidence chunks.",
+            "violations": evidence,
+            "evidence": evidence
         }
 
 
@@ -533,6 +661,7 @@ class SQLiteGraphRetriever(BaseRetriever):
         for cp in list(concept_to_providers.keys()) + list(concept_to_dependents.keys()):
             if cp in query.lower() or any(token in cp for token in query_tokens):
                 matched_concepts.append(cp)
+        matched_concepts = list(dict.fromkeys(matched_concepts))
 
         visited_chunks = {}
         for cp in matched_concepts:
@@ -658,6 +787,14 @@ class SVOVerificationEngine:
         self.validator = validator
 
     def verify(self, query: str, top_k: int = 10) -> Dict[str, Any]:
+        return self.verify_with_ontology(query, top_k=top_k, ontology_assertions=None)
+
+    def verify_with_ontology(
+        self,
+        query: str,
+        top_k: int = 10,
+        ontology_assertions: Optional[List[OntologyAssertion]] = None
+    ) -> Dict[str, Any]:
         query_types = self.router.route(query)
         all_results = []
         
@@ -667,6 +804,21 @@ class SVOVerificationEngine:
             all_results.extend(self.semantic_store.retrieve(query, top_k))
         if QueryType.MULTI_HOP in query_types:
             all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
+        if QueryType.ONTOLOGY in query_types and ontology_assertions:
+            all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
+
+        # Ontology checks need candidates even when the query itself is generic.
+        # Fall back to the materialized chunks if retrieval produced nothing.
+        if ontology_assertions and not all_results and isinstance(self.chunk_store, SQLiteChunkStore):
+            conn = sqlite3.connect(self.chunk_store.db_path)
+            try:
+                chunk_ids = [row[0] for row in conn.execute("SELECT chunk_id FROM chunks").fetchall()]
+            finally:
+                conn.close()
+            all_results.extend([
+                RetrievalResult(chunk_id=chunk_id, score=0.0, source="fallback")
+                for chunk_id in chunk_ids
+            ])
             
         ranked_results = self.fusion_engine.fuse_and_rank(all_results, top_k)
         
@@ -678,7 +830,7 @@ class SVOVerificationEngine:
             res.chunk = chunk_map.get(res.chunk_id)
             
         # Pass ranked_results instead of just chunks so the validator has access to scores and sources
-        verification_output = self.validator.validate(query, ranked_results)
+        verification_output = self.validator.validate(query, ranked_results, ontology_assertions=ontology_assertions)
         return verification_output
 
 
