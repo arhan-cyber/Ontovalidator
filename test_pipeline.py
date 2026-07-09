@@ -508,6 +508,96 @@ class OntologyValidationTests(unittest.TestCase):
         routes = router.route("Check for ontology rule violations and inconsistencies")
         self.assertIn(QueryType.ONTOLOGY, routes)
 
+    def test_triple_adjudicator_supported_contradicted_partial_unknown(self):
+        from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
+        from svo_engine import (
+            SVOVerificationEngine,
+            MoERouter,
+            SQLiteLexicalRetriever,
+            SQLiteSemanticRetriever,
+            SQLiteGraphRetriever,
+            WeightedFusionEngine,
+            SQLiteChunkStore,
+            OntologyAssertion,
+            MinimalValidator,
+        )
+
+        with workspace_tmpdir() as tmpdir:
+            db_path = os.path.join(tmpdir, "adjudicate.sqlite")
+            ingestor = DataIngestor(
+                sqlite_conn_path=db_path,
+                es_client=None,
+                milvus_collection=None,
+                neo4j_driver=None,
+                embedding_model=SimpleEmbeddingModel(),
+                svo_extractor=MockSVOExtractor(),
+                concept_extractor=MockConceptExtractor(),
+            )
+            ingestor.ingest_document("doc1", "Aspirin treats headache. Aspirin does not treat malaria.")
+
+            engine = SVOVerificationEngine(
+                router=MoERouter(),
+                lexical_store=SQLiteLexicalRetriever(db_path),
+                semantic_store=SQLiteSemanticRetriever(db_path),
+                graph_store=SQLiteGraphRetriever(db_path),
+                fusion_engine=WeightedFusionEngine(),
+                chunk_store=SQLiteChunkStore(db_path),
+                validator=MinimalValidator(),
+            )
+
+            supported = engine.adjudicate_triple(
+                document_text=None,
+                assertion=OntologyAssertion(
+                    assertion_id="a_supported",
+                    subject="Aspirin",
+                    relation="treats",
+                    object="headache"
+                ),
+                top_k=5,
+            )
+            self.assertEqual(supported.label, "supported")
+            self.assertGreaterEqual(supported.score, 0.7)
+            self.assertTrue(supported.rationale)
+            self.assertGreaterEqual(len(supported.evidence), 1)
+
+            contradicted = engine.adjudicate_triple(
+                document_text=None,
+                assertion=OntologyAssertion(
+                    assertion_id="a_contradicted",
+                    subject="Aspirin",
+                    relation="treats",
+                    object="malaria"
+                ),
+                top_k=5,
+            )
+            self.assertIn(contradicted.label, {"contradicted", "partial", "unknown"})
+            self.assertGreaterEqual(len(contradicted.evidence), 1)
+
+            partial = engine.adjudicate_triple(
+                document_text=None,
+                assertion=OntologyAssertion(
+                    assertion_id="a_partial",
+                    subject="Aspirin",
+                    relation="treats",
+                    object="fever"
+                ),
+                top_k=5,
+            )
+            self.assertIn(partial.label, {"partial", "supported"})
+
+            unknown = engine.adjudicate_triple(
+                document_text=None,
+                assertion=OntologyAssertion(
+                    assertion_id="a_unknown",
+                    subject="Water",
+                    relation="regulates",
+                    object="growth"
+                ),
+                top_k=5,
+            )
+            self.assertIn(unknown.label, {"unknown", "partial"})
+            self.assertGreaterEqual(unknown.score, 0.0)
+
 
 class EndToEndIntegrationTests(unittest.TestCase):
     """End-to-end tests with real components where available."""
