@@ -62,7 +62,8 @@ class DataIngestor:
         neo4j_driver,
         embedding_model,
         svo_extractor,
-        concept_extractor=None
+        concept_extractor=None,
+        config=None
     ):
         self.sqlite_path = sqlite_conn_path
         self.es_client = es_client
@@ -70,11 +71,15 @@ class DataIngestor:
         self.neo4j_driver = neo4j_driver
         self.embedding_model = embedding_model
         self.svo_extractor = svo_extractor
+        self.config = config
 
         if concept_extractor is None:
             self.concept_extractor = MockConceptExtractor()
         else:
             self.concept_extractor = concept_extractor
+
+        if config and config.verbose:
+            print(f"DataIngestor initialized with config: backend_mode={config.backend_mode.value}")
 
     def chunk_document(self, document_id: str, raw_text: str) -> List[Chunk]:
         """Split raw text into chunks by sentence."""
@@ -151,7 +156,7 @@ class DataIngestor:
 
         print(f"Successfully completed ingestion for {document_id}!")
         return {
-            "status": "SUCCESS",
+            "status": "success",
             "document_id": document_id,
             "chunks": len(chunks),
             "svos": len(all_svos),
@@ -288,10 +293,29 @@ def run_demo(
     document_id: str = "demo_doc",
     raw_text: str = "Aspirin treats headache and reduces pain.",
     db_path: str = "svo_data.db",
-    run_mode: str = "demo"
+    config=None,
+    run_mode: str = None
 ) -> Dict[str, Any]:
-    """Run the ingestion demo."""
-    if run_mode == "full":
+    """
+    Run the ingestion demo.
+
+    Args:
+        document_id: Document identifier
+        raw_text: Text to ingest
+        db_path: SQLite database path
+        config: Optional PipelineConfig instance
+        run_mode: Deprecated. Use config instead. "demo" or "full" mode
+    """
+    # Handle backward compatibility with run_mode parameter
+    if config is None and run_mode is None:
+        run_mode = "demo"  # Default behavior
+
+    if config is not None:
+        # Use config to determine backends
+        from ..factories import EngineFactory
+        ingestor = EngineFactory.create_ingestor(config)
+    elif run_mode == "full":
+        # Old behavior: use production backends
         try:
             from ..helpers.neo4j import get_neo4j_driver, initialize_neo4j_schema
             driver = get_neo4j_driver()
@@ -317,20 +341,32 @@ def run_demo(
         except ImportError:
             print("Error: Could not import 'pymilvus'. Please run 'pip install pymilvus'.")
             milvus_collection = LocalMilvusCollection()
+
+        ingestor = DataIngestor(
+            sqlite_conn_path=db_path,
+            es_client=es_client,
+            milvus_collection=milvus_collection,
+            neo4j_driver=driver,
+            embedding_model=embedding_model,
+            svo_extractor=MockSVOExtractor(),
+            concept_extractor=MockConceptExtractor(),
+        )
     else:
+        # Default: demo mode with mock backends
         driver = LocalNeo4jDriver()
         es_client = LocalElasticsearchClient()
         milvus_collection = LocalMilvusCollection()
         embedding_model = SimpleEmbeddingModel()
 
-    ingestor = DataIngestor(
-        sqlite_conn_path=db_path,
-        es_client=es_client,
-        milvus_collection=milvus_collection,
-        neo4j_driver=driver,
-        embedding_model=embedding_model,
-        svo_extractor=MockSVOExtractor(),
-        concept_extractor=MockConceptExtractor(),
-    )
+        ingestor = DataIngestor(
+            sqlite_conn_path=db_path,
+            es_client=es_client,
+            milvus_collection=milvus_collection,
+            neo4j_driver=driver,
+            embedding_model=embedding_model,
+            svo_extractor=MockSVOExtractor(),
+            concept_extractor=MockConceptExtractor(),
+        )
+
     result = ingestor.ingest_document(document_id, raw_text)
     return result

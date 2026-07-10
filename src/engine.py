@@ -2,6 +2,7 @@
 
 import re
 import sqlite3
+import logging
 from typing import List, Dict, Any, Optional
 
 from .models import (
@@ -18,6 +19,8 @@ from .fusion import FusionEngine, WeightedFusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import EvidenceValidator, MinimalValidator
 
+logger = logging.getLogger(__name__)
+
 
 class SVOVerificationEngine:
     """Main verification engine that orchestrates retrieval, fusion, and validation."""
@@ -31,7 +34,10 @@ class SVOVerificationEngine:
         fusion_engine: FusionEngine,
         chunk_store: ChunkStore,
         validator: EvidenceValidator,
-        triple_classifier: Optional[Any] = None
+        triple_classifier: Optional[Any] = None,
+        svo_extractor: Optional[Any] = None,
+        embedding_model: Optional[Any] = None,
+        config: Optional[Any] = None,
     ):
         self.router = router
         self.lexical_store = lexical_store
@@ -41,6 +47,34 @@ class SVOVerificationEngine:
         self.chunk_store = chunk_store
         self.validator = validator
         self.triple_classifier = triple_classifier
+        self.svo_extractor = svo_extractor
+        self.embedding_model = embedding_model
+        self.config = config
+
+        if config and config.verbose:
+            logger.info(f"SVOVerificationEngine initialized with config: backend_mode={config.backend_mode.value}")
+
+    @classmethod
+    def from_config(cls, config: "Any") -> "SVOVerificationEngine":
+        """
+        Factory method to create engine from config.
+
+        Args:
+            config: PipelineConfig instance
+
+        Returns:
+            Configured SVOVerificationEngine
+        """
+        from .factories import EngineFactory
+        return EngineFactory.create_verification_engine(config)
+
+    def get_backend_status(self) -> Dict[str, str]:
+        """Return which backends are actually active."""
+        return {
+            "lexical": self.lexical_store.__class__.__name__,
+            "semantic": self.semantic_store.__class__.__name__,
+            "graph": self.graph_store.__class__.__name__,
+        }
 
     def verify(self, query: str, top_k: int = 10) -> Dict[str, Any]:
         return self.verify_with_ontology(query, top_k=top_k, ontology_assertions=None)
@@ -379,15 +413,44 @@ class SVOVerificationEngine:
         """
         from .ingestion import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
 
+        # Use configured models if available, otherwise fall back to defaults
+        if self.svo_extractor is None:
+            svo_extractor = MockSVOExtractor()
+        else:
+            svo_extractor = self.svo_extractor
+            if self.config and self.config.verbose:
+                logger.info(f"Using configured SVO extractor: {svo_extractor.__class__.__name__}")
+
+        if self.embedding_model is None:
+            embedding_model = SimpleEmbeddingModel()
+        else:
+            embedding_model = self.embedding_model
+            if self.config and self.config.verbose:
+                logger.info(f"Using configured embedding model: {embedding_model.__class__.__name__}")
+
+        # Get backend clients from configured retrievers if they're production types
+        es_client = None
+        milvus_collection = None
+        neo4j_driver = None
+
+        # Try to extract clients from production retrievers
+        if hasattr(self.lexical_store, 'client'):
+            es_client = self.lexical_store.client
+        if hasattr(self.semantic_store, 'collection'):
+            milvus_collection = self.semantic_store.collection
+        if hasattr(self.graph_store, 'driver'):
+            neo4j_driver = self.graph_store.driver
+
         # Step 1: Ingest the document
         ingestor = DataIngestor(
             sqlite_conn_path=self.chunk_store.db_path,
-            es_client=None,
-            milvus_collection=None,
-            neo4j_driver=None,
-            embedding_model=SimpleEmbeddingModel(),
-            svo_extractor=MockSVOExtractor(),
+            es_client=es_client,
+            milvus_collection=milvus_collection,
+            neo4j_driver=neo4j_driver,
+            embedding_model=embedding_model,
+            svo_extractor=svo_extractor,
             concept_extractor=MockConceptExtractor(),
+            config=self.config,
         )
 
         ingestion_result = ingestor.ingest_document(document_id, raw_text)
@@ -447,4 +510,5 @@ class SVOVerificationEngine:
             "svos_extracted": ingestion_result.get("svos", 0),
             "verdicts": verdicts,
             "summary": summary,
+            "backend_status": self.get_backend_status(),
         }

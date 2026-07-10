@@ -1,6 +1,7 @@
 """Tests for the factory pattern and backend instantiation."""
 
 import pytest
+import sys
 from unittest import mock
 
 from src.config import PipelineConfig, BackendMode, ElasticsearchConfig, MilvusConfig, Neo4jConfig
@@ -9,6 +10,22 @@ from src.engine import SVOVerificationEngine
 from src.retrieval import SQLiteLexicalRetriever, SQLiteSemanticRetriever, SQLiteGraphRetriever
 from src.ingestion.embeddings import SimpleEmbeddingModel
 from src.ingestion.extractors import MockSVOExtractor
+
+# Mock external dependencies that might not be installed
+sys.modules['elasticsearch'] = mock.MagicMock()
+sys.modules['neo4j'] = mock.MagicMock()
+sys.modules['pymilvus'] = mock.MagicMock()
+
+# Ensure helpers submodules are available for patching
+sys.modules['src.helpers.elasticsearch'] = mock.MagicMock()
+sys.modules['src.helpers.neo4j'] = mock.MagicMock()
+sys.modules['src.helpers.milvus'] = mock.MagicMock()
+
+# Make mock functions available
+sys.modules['src.helpers.elasticsearch'].get_elasticsearch_client = mock.MagicMock()
+sys.modules['src.helpers.neo4j'].get_neo4j_driver = mock.MagicMock()
+sys.modules['src.helpers.neo4j'].initialize_neo4j_schema = mock.MagicMock()
+sys.modules['src.helpers.milvus'].get_milvus_collection = mock.MagicMock()
 
 
 class TestLexicalRetrieverFactory:
@@ -21,7 +38,7 @@ class TestLexicalRetrieverFactory:
             elasticsearch=ElasticsearchConfig(enabled=True, host="localhost", port=9200),
         )
 
-        with mock.patch('src.factories.get_elasticsearch_client') as mock_get_es:
+        with mock.patch('src.helpers.elasticsearch.get_elasticsearch_client') as mock_get_es:
             mock_client = mock.MagicMock()
             mock_get_es.return_value = mock_client
 
@@ -50,7 +67,7 @@ class TestLexicalRetrieverFactory:
             elasticsearch=ElasticsearchConfig(enabled=True),
         )
 
-        with mock.patch('src.factories.get_elasticsearch_client') as mock_get_es:
+        with mock.patch('src.helpers.elasticsearch.get_elasticsearch_client') as mock_get_es:
             mock_get_es.side_effect = Exception("Connection failed")
 
             retriever = EngineFactory._create_lexical_retriever(config)
@@ -69,7 +86,7 @@ class TestSemanticRetrieverFactory:
             milvus=MilvusConfig(enabled=True, host="localhost", port=19530),
         )
 
-        with mock.patch('src.factories.MilvusSemanticRetriever') as mock_retriever:
+        with mock.patch('src.retrieval.semantic.MilvusSemanticRetriever') as mock_retriever:
             mock_instance = mock.MagicMock()
             mock_retriever.return_value = mock_instance
 
@@ -104,7 +121,7 @@ class TestGraphRetrieverFactory:
             neo4j=Neo4jConfig(enabled=True, uri="bolt://localhost:7687", user="neo4j", password="password"),
         )
 
-        with mock.patch('src.factories.get_neo4j_driver') as mock_get_driver:
+        with mock.patch('src.helpers.neo4j.get_neo4j_driver') as mock_get_driver:
             mock_driver = mock.MagicMock()
             mock_get_driver.return_value = mock_driver
 
@@ -134,7 +151,7 @@ class TestGraphRetrieverFactory:
             neo4j=Neo4jConfig(enabled=True),
         )
 
-        with mock.patch('src.factories.get_neo4j_driver') as mock_get_driver:
+        with mock.patch('src.helpers.neo4j.get_neo4j_driver') as mock_get_driver:
             mock_get_driver.side_effect = Exception("Connection failed")
 
             retriever = EngineFactory._create_graph_retriever(config)
@@ -163,7 +180,7 @@ class TestEmbeddingModelFactory:
             embedding_model_name="transformer",
         )
 
-        with mock.patch('src.factories.TransformerEmbeddingModel') as mock_transformer:
+        with mock.patch('src.ingestion.embeddings.TransformerEmbeddingModel') as mock_transformer:
             mock_instance = mock.MagicMock()
             mock_transformer.return_value = mock_instance
 
@@ -311,7 +328,7 @@ class TestFactoryBackendFallback:
             elasticsearch=ElasticsearchConfig(enabled=True),
         )
 
-        with mock.patch('src.factories.get_elasticsearch_client') as mock_get_es:
+        with mock.patch('src.helpers.elasticsearch.get_elasticsearch_client') as mock_get_es:
             mock_client = mock.MagicMock()
             mock_get_es.return_value = mock_client
 
@@ -351,9 +368,9 @@ class TestIngestorFactory:
             neo4j=Neo4jConfig(enabled=True),
         )
 
-        with mock.patch('src.factories.get_elasticsearch_client') as mock_es, \
-             mock.patch('src.factories.get_milvus_collection') as mock_milvus, \
-             mock.patch('src.factories.get_neo4j_driver') as mock_neo4j:
+        with mock.patch('src.helpers.elasticsearch.get_elasticsearch_client') as mock_es, \
+             mock.patch('src.helpers.milvus.get_milvus_collection') as mock_milvus, \
+             mock.patch('src.helpers.neo4j.get_neo4j_driver') as mock_neo4j:
 
             mock_es.return_value = mock.MagicMock()
             mock_milvus.return_value = mock.MagicMock()
