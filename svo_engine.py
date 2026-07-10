@@ -801,7 +801,8 @@ class SVOVerificationEngine:
         graph_store: GraphRetriever,
         fusion_engine: FusionEngine,
         chunk_store: ChunkStore,
-        validator: EvidenceValidator
+        validator: EvidenceValidator,
+        triple_classifier: Optional[Any] = None
     ):
         self.router = router
         self.lexical_store = lexical_store
@@ -810,6 +811,7 @@ class SVOVerificationEngine:
         self.fusion_engine = fusion_engine
         self.chunk_store = chunk_store
         self.validator = validator
+        self.triple_classifier = triple_classifier
 
     def verify(self, query: str, top_k: int = 10) -> Dict[str, Any]:
         return self.verify_with_ontology(query, top_k=top_k, ontology_assertions=None)
@@ -1007,7 +1009,90 @@ class SVOVerificationEngine:
             retrieval_sources.append(res.source)
             evidence.append(self._chunk_evidence_for_assertion(assertion, res.chunk, res.source, res.score))
 
+        if self.triple_classifier and evidence:
+            try:
+                from lm_triple_classifier import AssertionInput
+                lm_candidates = []
+                for res in ranked:
+                    if not res.chunk:
+                        continue
+                    lm_result = self.triple_classifier.classify(
+                        res.chunk.text,
+                        AssertionInput(
+                            assertion_id=assertion.assertion_id,
+                            subject=assertion.subject,
+                            relation=assertion.relation,
+                            object=assertion.object,
+                            polarity=assertion.polarity,
+                            rule_type=assertion.rule_type,
+                        ),
+                    )
+                    lm_candidates.append((res.chunk.chunk_id, lm_result.label, lm_result.confidence, lm_result.rationale))
+
+                # Use the LM as a bounded signal, not the final judge.
+                # If it strongly disagrees with the heuristic label, keep the deterministic verdict
+                # but nudge the rationale to reflect mixed signals.
+                if lm_candidates:
+                    strongest = max(lm_candidates, key=lambda item: item[2])
+                    if strongest[1] == "supported" and strongest[2] >= 0.8:
+                        evidence.append(
+                            EvidenceSpan(
+                                chunk_id=strongest[0],
+                                text=next((r.chunk.text for r in ranked if r.chunk and r.chunk.chunk_id == strongest[0]), ""),
+                                source="lm",
+                                support_type="supports",
+                                confidence=round(float(strongest[2]), 4),
+                                matched_subject=True,
+                                matched_relation=True,
+                                matched_object=True,
+                            )
+                        )
+                    elif strongest[1] == "contradicted" and strongest[2] >= 0.8:
+                        evidence.append(
+                            EvidenceSpan(
+                                chunk_id=strongest[0],
+                                text=next((r.chunk.text for r in ranked if r.chunk and r.chunk.chunk_id == strongest[0]), ""),
+                                source="lm",
+                                support_type="refutes",
+                                confidence=round(float(strongest[2]), 4),
+                                matched_subject=True,
+                                matched_relation=True,
+                                matched_object=True,
+                            )
+                        )
+            except Exception:
+                pass
+
         return self._aggregate_triple_verdict(assertion, evidence, retrieval_sources)
+
+    def export_triple_adjudication(
+        self,
+        verdict: TripleVerdict,
+        writer: Any,
+        document_id: str = "unknown_document",
+    ) -> None:
+        from lm_triple_classifier import triple_verdict_to_example
+        example = triple_verdict_to_example(verdict, document_id=document_id)
+        writer.write_example(example)
+
+    def export_training_examples(
+        self,
+        document_id: str,
+        assertions: List[OntologyAssertion],
+        writer: Any,
+        top_k: int = 5,
+        document_text: Optional[str] = None,
+    ) -> List[TripleVerdict]:
+        verdicts = []
+        for assertion in assertions:
+            verdict = self.adjudicate_triple(
+                document_text=document_text,
+                assertion=assertion,
+                top_k=top_k,
+            )
+            self.export_triple_adjudication(verdict, writer, document_id=document_id)
+            verdicts.append(verdict)
+        return verdicts
 
     def verify_with_ontology(
         self,
@@ -1062,7 +1147,44 @@ if __name__ == "__main__":
     parser.add_argument("--db-path", default="svo_data.db")
     parser.add_argument("--query", default="What treats headache?")
     parser.add_argument("--run-mode", choices=["demo", "full"], default="demo", help="Choose 'demo' (uses mock db clients) or 'full' (uses real databases)")
+    parser.add_argument("--export-train", default=None, help="Write adjudication examples to a JSONL file")
+    parser.add_argument("--document-id", default="demo_doc")
+    parser.add_argument("--assertion", action="append", default=[], help="Ontology assertion as subject|relation|object|polarity, repeatable")
     args = parser.parse_args()
 
     result = run_demo(db_path=args.db_path, query=args.query, run_mode=args.run_mode)
+
+    if args.export_train:
+        from lm_triple_classifier import TripleDatasetWriter
+        writer = TripleDatasetWriter(args.export_train)
+        engine = SVOVerificationEngine(
+            router=MoERouter(),
+            lexical_store=SQLiteLexicalRetriever(args.db_path),
+            semantic_store=SQLiteSemanticRetriever(args.db_path),
+            graph_store=SQLiteGraphRetriever(args.db_path),
+            fusion_engine=WeightedFusionEngine(),
+            chunk_store=SQLiteChunkStore(args.db_path),
+            validator=MinimalValidator(),
+        )
+        assertions = []
+        for raw_assertion in args.assertion:
+            parts = raw_assertion.split("|")
+            if len(parts) < 3:
+                continue
+            subject, relation, obj = parts[:3]
+            polarity = parts[3] if len(parts) > 3 else "must_hold"
+            assertions.append(OntologyAssertion(
+                assertion_id=f"cli_{len(assertions)+1}",
+                subject=subject,
+                relation=relation,
+                object=obj,
+                polarity=polarity,
+            ))
+        if assertions:
+            engine.export_training_examples(
+                document_id=args.document_id,
+                assertions=assertions,
+                writer=writer,
+                top_k=5,
+            )
     print(json.dumps(result, indent=2))

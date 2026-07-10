@@ -598,6 +598,174 @@ class OntologyValidationTests(unittest.TestCase):
             self.assertIn(unknown.label, {"unknown", "partial"})
             self.assertGreaterEqual(unknown.score, 0.0)
 
+    def test_export_triple_adjudication_to_jsonl(self):
+        from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
+        from lm_triple_classifier import TripleDatasetWriter
+        from svo_engine import (
+            SVOVerificationEngine,
+            MoERouter,
+            SQLiteLexicalRetriever,
+            SQLiteSemanticRetriever,
+            SQLiteGraphRetriever,
+            WeightedFusionEngine,
+            SQLiteChunkStore,
+            OntologyAssertion,
+            MinimalValidator,
+        )
+
+        with workspace_tmpdir() as tmpdir:
+            db_path = os.path.join(tmpdir, "export.sqlite")
+            train_path = os.path.join(tmpdir, "train.jsonl")
+            ingestor = DataIngestor(
+                sqlite_conn_path=db_path,
+                es_client=None,
+                milvus_collection=None,
+                neo4j_driver=None,
+                embedding_model=SimpleEmbeddingModel(),
+                svo_extractor=MockSVOExtractor(),
+                concept_extractor=MockConceptExtractor(),
+            )
+            ingestor.ingest_document("doc1", "Aspirin treats headache.")
+
+            engine = SVOVerificationEngine(
+                router=MoERouter(),
+                lexical_store=SQLiteLexicalRetriever(db_path),
+                semantic_store=SQLiteSemanticRetriever(db_path),
+                graph_store=SQLiteGraphRetriever(db_path),
+                fusion_engine=WeightedFusionEngine(),
+                chunk_store=SQLiteChunkStore(db_path),
+                validator=MinimalValidator(),
+            )
+            verdict = engine.adjudicate_triple(
+                document_text=None,
+                assertion=OntologyAssertion(
+                    assertion_id="a_export",
+                    subject="Aspirin",
+                    relation="treats",
+                    object="headache",
+                ),
+                top_k=5,
+            )
+            writer = TripleDatasetWriter(train_path)
+            engine.export_triple_adjudication(verdict, writer, document_id="doc1")
+
+            with open(train_path, "r", encoding="utf-8") as handle:
+                payload = handle.readline()
+            self.assertIn('"task": "triple_classification"', payload)
+            self.assertIn('"label": "supported"', payload)
+
+    def test_export_training_examples_batch(self):
+        from ingestion_pipeline import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
+        from lm_triple_classifier import TripleDatasetWriter
+        from svo_engine import (
+            SVOVerificationEngine,
+            MoERouter,
+            SQLiteLexicalRetriever,
+            SQLiteSemanticRetriever,
+            SQLiteGraphRetriever,
+            WeightedFusionEngine,
+            SQLiteChunkStore,
+            OntologyAssertion,
+            MinimalValidator,
+        )
+
+        with workspace_tmpdir() as tmpdir:
+            db_path = os.path.join(tmpdir, "batch.sqlite")
+            train_path = os.path.join(tmpdir, "batch.jsonl")
+            ingestor = DataIngestor(
+                sqlite_conn_path=db_path,
+                es_client=None,
+                milvus_collection=None,
+                neo4j_driver=None,
+                embedding_model=SimpleEmbeddingModel(),
+                svo_extractor=MockSVOExtractor(),
+                concept_extractor=MockConceptExtractor(),
+            )
+            ingestor.ingest_document("doc1", "Aspirin treats headache. Aspirin does not treat malaria.")
+
+            engine = SVOVerificationEngine(
+                router=MoERouter(),
+                lexical_store=SQLiteLexicalRetriever(db_path),
+                semantic_store=SQLiteSemanticRetriever(db_path),
+                graph_store=SQLiteGraphRetriever(db_path),
+                fusion_engine=WeightedFusionEngine(),
+                chunk_store=SQLiteChunkStore(db_path),
+                validator=MinimalValidator(),
+            )
+            writer = TripleDatasetWriter(train_path)
+            verdicts = engine.export_training_examples(
+                document_id="doc1",
+                assertions=[
+                    OntologyAssertion(
+                        assertion_id="a1",
+                        subject="Aspirin",
+                        relation="treats",
+                        object="headache",
+                    ),
+                    OntologyAssertion(
+                        assertion_id="a2",
+                        subject="Aspirin",
+                        relation="treats",
+                        object="malaria",
+                    ),
+                ],
+                writer=writer,
+                top_k=5,
+            )
+
+            self.assertEqual(len(verdicts), 2)
+            with open(train_path, "r", encoding="utf-8") as handle:
+                lines = [line.strip() for line in handle if line.strip()]
+            self.assertEqual(len(lines), 2)
+            self.assertTrue(any('"assertion_id": "a1"' in line for line in lines))
+            self.assertTrue(any('"assertion_id": "a2"' in line for line in lines))
+
+    def test_lm_triple_classifier_schema_and_fallback(self):
+        from lm_triple_classifier import PromptTripleClassifier, triple_training_example, AssertionInput, TripleDatasetWriter
+
+        example = triple_training_example(
+            example_id="ex_1",
+            document_id="doc_1",
+            chunk_id="chunk_1",
+            chunk_text="Aspirin treats headache.",
+            assertion={
+                "assertion_id": "a1",
+                "subject": "Aspirin",
+                "relation": "treats",
+                "object": "headache",
+                "polarity": "must_hold",
+                "rule_type": "constraint",
+            },
+            label="supported",
+            score_bucket="high",
+            rationale="Direct match."
+        )
+        payload = example.to_jsonl()
+        self.assertIn('"task": "triple_classification"', payload)
+        self.assertIn('"label": "supported"', payload)
+
+        classifier = PromptTripleClassifier()
+        result = classifier.classify(
+            "Aspirin treats headache.",
+            AssertionInput(
+                assertion_id="a1",
+                subject="Aspirin",
+                relation="treats",
+                object="headache"
+            )
+        )
+        self.assertIn(result.label, {"supported", "contradicted", "partial", "unknown"})
+        self.assertGreaterEqual(result.confidence, 0.0)
+
+        with workspace_tmpdir() as tmpdir:
+            jsonl_path = os.path.join(tmpdir, "train.jsonl")
+            writer = TripleDatasetWriter(jsonl_path)
+            writer.write_example(example)
+            with open(jsonl_path, "r", encoding="utf-8") as handle:
+                line = handle.readline().strip()
+            self.assertIn('"task": "triple_classification"', line)
+            self.assertIn('"example_id": "ex_1"', line)
+
 
 class EndToEndIntegrationTests(unittest.TestCase):
     """End-to-end tests with real components where available."""

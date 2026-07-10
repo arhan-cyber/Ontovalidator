@@ -200,4 +200,25 @@ The script will output the JSON shown in Section 4.
 
 ---
 
+## 7. Export QLoRA Training Data
+You can export triple adjudications to JSONL for later fine-tuning:
+
+```bash
+python run_export.py \
+  --db-path svo_data.db \
+  --document-id demo_doc \
+  --text "Aspirin treats headache and reduces pain." \
+  --out train.jsonl \
+  --assertion "Aspirin|treats|headache|must_hold" \
+  --assertion "Aspirin|treats|malaria|must_hold"
+```
+
+Each line in `train.jsonl` is a single QLoRA-style triple classification example with:
+- input chunk text
+- ontology assertion
+- label
+- score bucket
+- rationale
+
+---
 
