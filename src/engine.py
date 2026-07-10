@@ -357,3 +357,94 @@ class SVOVerificationEngine:
 
         verification_output = self.validator.validate(query, ranked_results, ontology_assertions=ontology_assertions)
         return verification_output
+
+    def validate_triples_batch(
+        self,
+        document_id: str,
+        raw_text: str,
+        triples: List[OntologyAssertion],
+        top_k: int = 5
+    ) -> Dict[str, Any]:
+        """
+        End-to-end pipeline: ingest document + validate all triples.
+
+        Args:
+            document_id: Unique document identifier
+            raw_text: Raw document text
+            triples: List of OntologyAssertion to validate
+            top_k: Number of top chunks to consider per triple
+
+        Returns:
+            Dict with ingestion status, verdicts for each triple, and summary statistics
+        """
+        from .ingestion import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
+
+        # Step 1: Ingest the document
+        ingestor = DataIngestor(
+            sqlite_conn_path=self.chunk_store.db_path,
+            es_client=None,
+            milvus_collection=None,
+            neo4j_driver=None,
+            embedding_model=SimpleEmbeddingModel(),
+            svo_extractor=MockSVOExtractor(),
+            concept_extractor=MockConceptExtractor(),
+        )
+
+        ingestion_result = ingestor.ingest_document(document_id, raw_text)
+
+        # Step 2: Validate each triple
+        verdicts = []
+        for triple in triples:
+            verdict = self.adjudicate_triple(
+                document_text=None,  # Already ingested
+                assertion=triple,
+                top_k=top_k
+            )
+
+            # Convert to JSON-serializable format
+            verdict_dict = {
+                "assertion_id": verdict.assertion_id,
+                "subject": verdict.subject,
+                "relation": verdict.relation,
+                "object": verdict.object,
+                "label": verdict.label,
+                "score": float(verdict.score),
+                "rationale": verdict.rationale,
+                "evidence": [
+                    {
+                        "chunk_id": span.chunk_id,
+                        "text": span.text,
+                        "source": span.source,
+                        "confidence": float(span.confidence),
+                        "match_type": span.support_type,
+                        "matched": {
+                            "subject": span.matched_subject,
+                            "relation": span.matched_relation,
+                            "object": span.matched_object,
+                        }
+                    }
+                    for span in verdict.evidence
+                ],
+                "rule_hits": verdict.rule_hits,
+                "retrieval_sources": sorted(set(verdict.retrieval_sources)),
+            }
+            verdicts.append(verdict_dict)
+
+        # Step 3: Compute summary statistics
+        summary = {
+            "total_triples": len(triples),
+            "supported": sum(1 for v in verdicts if v["label"] == "supported"),
+            "contradicted": sum(1 for v in verdicts if v["label"] == "contradicted"),
+            "partial": sum(1 for v in verdicts if v["label"] == "partial"),
+            "unknown": sum(1 for v in verdicts if v["label"] == "unknown"),
+            "avg_score": sum(v["score"] for v in verdicts) / len(verdicts) if verdicts else 0.0,
+        }
+
+        return {
+            "document_id": document_id,
+            "ingestion_status": ingestion_result["status"],
+            "chunks_ingested": ingestion_result.get("chunks", 0),
+            "svos_extracted": ingestion_result.get("svos", 0),
+            "verdicts": verdicts,
+            "summary": summary,
+        }
