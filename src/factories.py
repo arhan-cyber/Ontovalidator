@@ -10,6 +10,7 @@ from .retrieval import BaseRetriever, SQLiteLexicalRetriever, SQLiteSemanticRetr
 from .fusion import WeightedFusionEngine, FusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import MinimalValidator, EvidenceValidator
+from .classification.evidence_judge import HeuristicEvidenceJudge, PromptEvidenceJudge
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,19 @@ class EngineFactory:
         # Create validator
         validator = EngineFactory._create_validator(config)
 
+        # Create evidence judge
+        evidence_judge = HeuristicEvidenceJudge()
+        if config.enable_lm_judge or config.enable_lm_classifier:
+            try:
+                evidence_judge = PromptEvidenceJudge(
+                    model_name=config.judge_model_name or config.classifier_model_name or "typeform/distilbert-base-uncased-mnli"
+                )
+                if config.verbose:
+                    logger.info("LM evidence judge enabled")
+            except Exception as e:
+                if config.verbose:
+                    logger.warning(f"Could not create LM evidence judge: {e}")
+
         # Create triple classifier if enabled
         triple_classifier = None
         if config.enable_lm_classifier:
@@ -81,6 +95,7 @@ class EngineFactory:
             chunk_store=chunk_store,
             validator=validator,
             triple_classifier=triple_classifier,
+            evidence_judge=evidence_judge,
             config=config,
         )
 
@@ -97,12 +112,10 @@ class EngineFactory:
             try:
                 from .retrieval.lexical import LexicalRetriever
                 from .helpers.elasticsearch import get_elasticsearch_client
-                es_client = get_elasticsearch_client(
-                    host=config.elasticsearch.host,
-                    port=config.elasticsearch.port,
-                )
+                es_url = f"http://{config.elasticsearch.host}:{config.elasticsearch.port}"
+                es_client = get_elasticsearch_client(hosts=[es_url])
                 if config.verbose:
-                    logger.info(f"Using Elasticsearch for lexical retrieval at {config.elasticsearch.host}:{config.elasticsearch.port}")
+                    logger.info(f"Using Elasticsearch for lexical retrieval at {es_url}")
                 return LexicalRetriever(
                     es_client=es_client,
                     index_name=config.elasticsearch.index_name,

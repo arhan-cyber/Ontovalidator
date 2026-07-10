@@ -80,6 +80,40 @@ class TripleVerdict:
     rule_hits: List[str]
 
 
+@dataclass
+class EvidencePackEntry:
+    chunk_id: str
+    text: str
+    source: str
+    retrieval_score: float
+    support_type: str
+    matched_subject: bool
+    matched_relation: bool
+    matched_object: bool
+
+
+@dataclass
+class EvidencePack:
+    assertion_id: str
+    subject: str
+    relation: str
+    object: str
+    polarity: str
+    rule_type: str
+    evidence: List[EvidencePackEntry]
+    graph_summary: List[str]
+
+
+@dataclass
+class JudgeVerdict:
+    label: str
+    confidence: float
+    rationale: str
+    evidence_chunk_ids: List[str]
+    counterevidence_chunk_ids: List[str]
+    graph_reasoning: Optional[str] = None
+
+
 class QueryType(Enum):
     EXACT_MATCH = "exact_match"
     COMPLEX = "complex"

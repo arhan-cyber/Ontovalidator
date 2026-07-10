@@ -12,12 +12,16 @@ from .models import (
     OntologyAssertion,
     EvidenceSpan,
     TripleVerdict,
+    EvidencePack,
+    EvidencePackEntry,
+    JudgeVerdict,
 )
 from .routing import QueryRouter, MoERouter
 from .retrieval import BaseRetriever, SQLiteGraphRetriever
 from .fusion import FusionEngine, WeightedFusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import EvidenceValidator, MinimalValidator
+from .classification.evidence_judge import BaseEvidenceJudge, HeuristicEvidenceJudge
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,7 @@ class SVOVerificationEngine:
         chunk_store: ChunkStore,
         validator: EvidenceValidator,
         triple_classifier: Optional[Any] = None,
+        evidence_judge: Optional[BaseEvidenceJudge] = None,
         svo_extractor: Optional[Any] = None,
         embedding_model: Optional[Any] = None,
         config: Optional[Any] = None,
@@ -47,6 +52,7 @@ class SVOVerificationEngine:
         self.chunk_store = chunk_store
         self.validator = validator
         self.triple_classifier = triple_classifier
+        self.evidence_judge = evidence_judge or HeuristicEvidenceJudge()
         self.svo_extractor = svo_extractor
         self.embedding_model = embedding_model
         self.config = config
@@ -212,6 +218,85 @@ class SVOVerificationEngine:
             rule_hits=rule_hits,
         )
 
+
+    def _build_evidence_pack(
+        self,
+        assertion: OntologyAssertion,
+        evidence: List[EvidenceSpan],
+        ranked_results: List[RetrievalResult],
+    ) -> EvidencePack:
+        chunk_by_id = {res.chunk_id: res for res in ranked_results}
+        entries = []
+        for span in evidence:
+            res = chunk_by_id.get(span.chunk_id)
+            entries.append(
+                EvidencePackEntry(
+                    chunk_id=span.chunk_id,
+                    text=span.text,
+                    source=span.source,
+                    retrieval_score=float(res.score if res else 0.0),
+                    support_type=span.support_type,
+                    matched_subject=span.matched_subject,
+                    matched_relation=span.matched_relation,
+                    matched_object=span.matched_object,
+                )
+            )
+        graph_summary = []
+        for res in ranked_results:
+            if not res.chunk:
+                continue
+            graph_hint = res.chunk.metadata.get("graph_summary") if isinstance(res.chunk.metadata, dict) else None
+            if isinstance(graph_hint, str) and graph_hint.strip():
+                graph_summary.append(graph_hint.strip())
+            elif isinstance(graph_hint, list):
+                graph_summary.extend([str(item) for item in graph_hint if str(item).strip()])
+        return EvidencePack(
+            assertion_id=assertion.assertion_id,
+            subject=assertion.subject,
+            relation=assertion.relation,
+            object=assertion.object,
+            polarity=assertion.polarity,
+            rule_type=assertion.rule_type,
+            evidence=entries,
+            graph_summary=graph_summary,
+        )
+
+    def _should_run_evidence_judge(self, heuristic_verdict: TripleVerdict, evidence_pack: EvidencePack) -> bool:
+        support_count = sum(1 for e in evidence_pack.evidence if e.support_type == "supports")
+        refute_count = sum(1 for e in evidence_pack.evidence if e.support_type == "refutes")
+        return (
+            heuristic_verdict.label in {"partial", "unknown"}
+            or (support_count > 0 and refute_count > 0)
+            or len(set(heuristic_verdict.retrieval_sources)) > 1
+            or any("->" in item or "DEPENDS_ON" in item or "PROVIDES" in item for item in evidence_pack.graph_summary)
+            or heuristic_verdict.score < 0.6
+        )
+
+    def _merge_verdicts(self, heuristic: TripleVerdict, judge: Optional[JudgeVerdict]) -> TripleVerdict:
+        if judge is None:
+            return heuristic
+        if judge.label == heuristic.label:
+            score = max(float(heuristic.score), float(judge.confidence))
+        elif judge.label == "supported" and heuristic.label != "contradicted":
+            score = max(float(heuristic.score), float(judge.confidence))
+        elif judge.label == "contradicted" and heuristic.label != "supported":
+            score = max(float(heuristic.score), float(judge.confidence))
+        else:
+            score = float(heuristic.score)
+        return TripleVerdict(
+            assertion_id=heuristic.assertion_id,
+            subject=heuristic.subject,
+            relation=heuristic.relation,
+            object=heuristic.object,
+            label=judge.label,
+            score=round(min(1.0, max(0.0, score)), 4),
+            rationale=f"Heuristic: {heuristic.rationale} LM: {judge.rationale}",
+            evidence=heuristic.evidence,
+            counter_evidence=heuristic.counter_evidence,
+            retrieval_sources=heuristic.retrieval_sources,
+            rule_hits=heuristic.rule_hits + ["lm_judge"] if judge else heuristic.rule_hits,
+        )
+
     def adjudicate_triple(
         self,
         document_text: Optional[str],
@@ -269,58 +354,20 @@ class SVOVerificationEngine:
             retrieval_sources.append(res.source)
             evidence.append(self._chunk_evidence_for_assertion(assertion, res.chunk, res.source, res.score))
 
-        if self.triple_classifier and evidence:
+        heuristic_verdict = self._aggregate_triple_verdict(assertion, evidence, retrieval_sources)
+        evidence_pack = self._build_evidence_pack(assertion, evidence, ranked)
+
+        judge_verdict = None
+        if self.evidence_judge and self._should_run_evidence_judge(heuristic_verdict, evidence_pack):
             try:
-                from .classification import AssertionInput
-                lm_candidates = []
-                for res in ranked:
-                    if not res.chunk:
-                        continue
-                    lm_result = self.triple_classifier.classify(
-                        res.chunk.text,
-                        AssertionInput(
-                            assertion_id=assertion.assertion_id,
-                            subject=assertion.subject,
-                            relation=assertion.relation,
-                            object=assertion.object,
-                            polarity=assertion.polarity,
-                            rule_type=assertion.rule_type,
-                        ),
-                    )
-                    lm_candidates.append((res.chunk.chunk_id, lm_result.label, lm_result.confidence, lm_result.rationale))
-
-                if lm_candidates:
-                    strongest = max(lm_candidates, key=lambda item: item[2])
-                    if strongest[1] == "supported" and strongest[2] >= 0.8:
-                        evidence.append(
-                            EvidenceSpan(
-                                chunk_id=strongest[0],
-                                text=next((r.chunk.text for r in ranked if r.chunk and r.chunk.chunk_id == strongest[0]), ""),
-                                source="lm",
-                                support_type="supports",
-                                confidence=round(float(strongest[2]), 4),
-                                matched_subject=True,
-                                matched_relation=True,
-                                matched_object=True,
-                            )
-                        )
-                    elif strongest[1] == "contradicted" and strongest[2] >= 0.8:
-                        evidence.append(
-                            EvidenceSpan(
-                                chunk_id=strongest[0],
-                                text=next((r.chunk.text for r in ranked if r.chunk and r.chunk.chunk_id == strongest[0]), ""),
-                                source="lm",
-                                support_type="refutes",
-                                confidence=round(float(strongest[2]), 4),
-                                matched_subject=True,
-                                matched_relation=True,
-                                matched_object=True,
-                            )
-                        )
+                judge_verdict = self.evidence_judge.judge(evidence_pack)
             except Exception:
-                pass
+                judge_verdict = None
 
-        return self._aggregate_triple_verdict(assertion, evidence, retrieval_sources)
+        final_verdict = self._merge_verdicts(heuristic_verdict, judge_verdict)
+        if judge_verdict is not None:
+            final_verdict.rule_hits = sorted(set(final_verdict.rule_hits + ["heuristic_baseline", "evidence_judge"]))
+        return final_verdict
 
     def export_triple_adjudication(
         self,

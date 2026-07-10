@@ -3,6 +3,11 @@ from .triple_classifier import (
     HeuristicTripleClassifier,
     PromptTripleClassifier,
 )
+from .evidence_judge import (
+    BaseEvidenceJudge,
+    HeuristicEvidenceJudge,
+    PromptEvidenceJudge,
+)
 from .dataset import (
     TripleClassificationExample,
     TripleDatasetWriter,
@@ -16,6 +21,9 @@ __all__ = [
     "BaseTripleClassifier",
     "HeuristicTripleClassifier",
     "PromptTripleClassifier",
+    "BaseEvidenceJudge",
+    "HeuristicEvidenceJudge",
+    "PromptEvidenceJudge",
     "TripleClassificationExample",
     "TripleDatasetWriter",
     "TripleClassificationResult",

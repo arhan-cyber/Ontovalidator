@@ -73,7 +73,11 @@ class PipelineConfig:
     svo_extractor_name: str = "mock"  # "mock" or "transformer"
     validator_name: str = "minimal"  # "minimal" or "transformer"
 
-    # Classifier
+    # Judge
+    enable_lm_judge: bool = False
+    judge_model_name: Optional[str] = None
+
+    # Backward-compatible classifier flags
     enable_lm_classifier: bool = False
     classifier_model_name: Optional[str] = None
 
@@ -94,6 +98,8 @@ class PipelineConfig:
             "embedding_model_name": self.embedding_model_name,
             "svo_extractor_name": self.svo_extractor_name,
             "validator_name": self.validator_name,
+            "enable_lm_judge": self.enable_lm_judge,
+            "judge_model_name": self.judge_model_name,
             "enable_lm_classifier": self.enable_lm_classifier,
             "classifier_model_name": self.classifier_model_name,
             "verbose": self.verbose,
@@ -176,6 +182,10 @@ class PipelineConfig:
         config.embedding_model_name = os.getenv("ONTO_EMBEDDING_MODEL", "simple")
         config.svo_extractor_name = os.getenv("ONTO_SVO_EXTRACTOR", "mock")
         config.validator_name = os.getenv("ONTO_VALIDATOR", "minimal")
+
+        # Judge
+        config.enable_lm_judge = os.getenv("ONTO_ENABLE_LM_JUDGE", "false").lower() == "true"
+        config.judge_model_name = os.getenv("ONTO_JUDGE_MODEL", None)
 
         # Classifier
         config.enable_lm_classifier = os.getenv("ONTO_ENABLE_LM_CLASSIFIER", "false").lower() == "true"
