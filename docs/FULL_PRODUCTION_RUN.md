@@ -86,9 +86,10 @@ export ONTO_VALIDATOR=transformer                        # default: "minimal"
 export ONTO_EVIDENCE_SPAN_CLASSIFIER=nli                  # default: "heuristic"
 export ONTO_EVIDENCE_SPAN_CLASSIFIER_MODEL=typeform/distilbert-base-uncased-mnli  # optional
 
-# LM evidence judge (second-pass adjudication)
+# LM evidence judge (second-pass adjudication) — generative few-shot judge
+# (FewShotPromptEvidenceJudge), not the NLI zero-shot-classification pipeline
 export ONTO_ENABLE_LM_JUDGE=true                          # default: false (HeuristicEvidenceJudge)
-export ONTO_JUDGE_MODEL=typeform/distilbert-base-uncased-mnli
+export ONTO_JUDGE_MODEL=google/flan-t5-large
 
 # Logging/diagnostics — needed to confirm nothing silently fell back to mocks (see §5)
 export ONTO_VERBOSE=true
@@ -109,8 +110,14 @@ outputs 768-dim vectors. If you set `ONTO_EMBEDDING_MODEL=transformer` you must 
 | `svo_extractor_name=transformer` | `google/flan-t5-small` |
 | `concept_extractor_name=transformer` | `google/flan-t5-large` |
 | `validator_name=transformer` | `typeform/distilbert-base-uncased-mnli` |
-| `evidence_span_classifier_name=nli` | `typeform/distilbert-base-uncased-mnli` |
-| LM evidence judge (`enable_lm_judge`) | `typeform/distilbert-base-uncased-mnli` |
+| `evidence_span_classifier_name=nli` | `typeform/distilbert-base-uncased-mnli` (NLI entailment, per-chunk) |
+| LM evidence judge (`enable_lm_judge`) | `google/flan-t5-large` (generative, few-shot prompted, pack-level) |
+
+Note the evidence judge is architecturally different from the other components: it's
+`FewShotPromptEvidenceJudge` (`src/classification/evidence_judge.py`), a generative
+model prompted with worked Evidence→Label examples, not an NLI zero-shot-classification
+pipeline. The older NLI-based judge (`PromptEvidenceJudge`, `typeform/distilbert-base-uncased-mnli`)
+is still in the codebase and tested, but is no longer the factory default.
 
 ## 4. Run the API (also serves the frontend)
 

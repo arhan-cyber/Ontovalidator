@@ -10,7 +10,7 @@ from .retrieval import BaseRetriever, SQLiteLexicalRetriever, SQLiteSemanticRetr
 from .fusion import WeightedFusionEngine, FusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import MinimalValidator, EvidenceValidator
-from .classification.evidence_judge import HeuristicEvidenceJudge, PromptEvidenceJudge
+from .classification.evidence_judge import HeuristicEvidenceJudge, FewShotPromptEvidenceJudge
 from .classification.evidence_span_classifier import BaseEvidenceSpanClassifier, HeuristicEvidenceSpanClassifier
 
 logger = logging.getLogger(__name__)
@@ -72,11 +72,11 @@ class EngineFactory:
         evidence_judge = HeuristicEvidenceJudge()
         if config.enable_lm_judge or config.enable_lm_classifier:
             try:
-                evidence_judge = PromptEvidenceJudge(
-                    model_name=config.judge_model_name or config.classifier_model_name or "typeform/distilbert-base-uncased-mnli"
+                evidence_judge = FewShotPromptEvidenceJudge(
+                    model_name=config.judge_model_name or config.classifier_model_name or "google/flan-t5-large"
                 )
                 if config.verbose:
-                    logger.info("LM evidence judge enabled")
+                    logger.info("Few-shot LM evidence judge enabled")
             except Exception as e:
                 if config.verbose:
                     logger.warning(f"Could not create LM evidence judge: {e}")

@@ -7,6 +7,7 @@ from .evidence_judge import (
     BaseEvidenceJudge,
     HeuristicEvidenceJudge,
     PromptEvidenceJudge,
+    FewShotPromptEvidenceJudge,
 )
 from .evidence_span_classifier import (
     BaseEvidenceSpanClassifier,
@@ -29,6 +30,7 @@ __all__ = [
     "BaseEvidenceJudge",
     "HeuristicEvidenceJudge",
     "PromptEvidenceJudge",
+    "FewShotPromptEvidenceJudge",
     "BaseEvidenceSpanClassifier",
     "HeuristicEvidenceSpanClassifier",
     "NLIEvidenceSpanClassifier",
