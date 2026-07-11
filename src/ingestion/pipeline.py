@@ -81,9 +81,21 @@ class DataIngestor:
         if config and config.verbose:
             print(f"DataIngestor initialized with config: backend_mode={config.backend_mode.value}")
 
+    _SENTENCE_PATTERN = re.compile(r".+?[.!?](?:\[[^\]]*\])*(?=\s+|$)")
+
     def chunk_document(self, document_id: str, raw_text: str) -> List[Chunk]:
-        """Split raw text into chunks by sentence."""
-        sentences = re.split(r"(?<=[.!?])\s+", raw_text.strip())
+        """Split raw text into chunks by sentence.
+
+        Citation markers like "[62]" commonly sit directly against the
+        preceding punctuation with no space (Wikipedia-style text), so a
+        plain split on `[.!?]\\s+` treats the whole passage as one sentence.
+        Matching sentences directly (rather than splitting on boundaries)
+        lets trailing citation brackets stay attached to their sentence.
+        """
+        stripped = raw_text.strip()
+        sentences = self._SENTENCE_PATTERN.findall(stripped)
+        if not sentences:
+            sentences = [stripped]
         chunks = []
 
         for sentence in sentences:

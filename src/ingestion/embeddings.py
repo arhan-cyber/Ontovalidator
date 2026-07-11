@@ -58,7 +58,7 @@ class TransformerSVOExtractor:
         from ..models import SVORelation
 
         prompt = f"Extract Subject-Verb-Object relations from text as 'Subject, Relation, Object'. Text: {text}"
-        inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
         with torch.no_grad():
             outputs = self.model.generate(**inputs, max_length=64)
         output_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
