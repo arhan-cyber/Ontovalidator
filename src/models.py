@@ -1,7 +1,7 @@
 """Core data models for the SVO verification pipeline."""
 
 from typing import List, Dict, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -28,8 +28,9 @@ class SVORelation:
 class RetrievalResult:
     chunk_id: str
     score: float
-    source: str  # 'lexical', 'semantic', 'graph'
+    source: str  # 'lexical', 'semantic', 'graph', or 'fusion'
     chunk: Optional[Chunk] = None
+    contributing_sources: List[str] = field(default_factory=list)
 
 
 @dataclass

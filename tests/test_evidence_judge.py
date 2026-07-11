@@ -13,7 +13,7 @@ class DummyRetriever:
     def __init__(self, results):
         self.results = results
 
-    def retrieve(self, query: str, top_k: int):
+    def retrieve(self, query: str, top_k: int, **kwargs):
         return list(self.results)
 
 

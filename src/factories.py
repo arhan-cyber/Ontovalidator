@@ -11,6 +11,7 @@ from .fusion import WeightedFusionEngine, FusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import MinimalValidator, EvidenceValidator
 from .classification.evidence_judge import HeuristicEvidenceJudge, PromptEvidenceJudge
+from .classification.evidence_span_classifier import BaseEvidenceSpanClassifier, HeuristicEvidenceSpanClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,9 @@ class EngineFactory:
         embedding_model = EngineFactory._create_embedding_model(config)
         svo_extractor = EngineFactory._create_svo_extractor(config)
 
+        # Create evidence-span classifier
+        evidence_span_classifier = EngineFactory._create_evidence_span_classifier(config)
+
         # Create evidence judge
         evidence_judge = HeuristicEvidenceJudge()
         if config.enable_lm_judge or config.enable_lm_classifier:
@@ -102,6 +106,7 @@ class EngineFactory:
             validator=validator,
             triple_classifier=triple_classifier,
             evidence_judge=evidence_judge,
+            evidence_span_classifier=evidence_span_classifier,
             svo_extractor=svo_extractor,
             embedding_model=embedding_model,
             config=config,
@@ -192,6 +197,27 @@ class EngineFactory:
         if config.verbose:
             logger.info("Using MinimalValidator")
         return MinimalValidator()
+
+    @staticmethod
+    def _create_evidence_span_classifier(config: PipelineConfig) -> BaseEvidenceSpanClassifier:
+        """Create per-chunk evidence-span classifier based on config."""
+        if config.evidence_span_classifier_name == "nli":
+            try:
+                from .classification.evidence_span_classifier import NLIEvidenceSpanClassifier
+                classifier = NLIEvidenceSpanClassifier(
+                    model_name=config.evidence_span_classifier_model_name or "typeform/distilbert-base-uncased-mnli"
+                )
+                if classifier.nli_pipeline is not None:
+                    if config.verbose:
+                        logger.info("Using NLIEvidenceSpanClassifier")
+                    return classifier
+                logger.warning("NLI model failed to load. Falling back to HeuristicEvidenceSpanClassifier.")
+            except Exception as e:
+                logger.warning(f"Failed to create NLIEvidenceSpanClassifier: {e}. Falling back to HeuristicEvidenceSpanClassifier.")
+
+        if config.verbose:
+            logger.info("Using HeuristicEvidenceSpanClassifier")
+        return HeuristicEvidenceSpanClassifier()
 
     @staticmethod
     def _create_embedding_model(config: PipelineConfig) -> Any:

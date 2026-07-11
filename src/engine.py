@@ -1,12 +1,10 @@
 """Main SVO verification engine orchestrator."""
 
-import re
 import sqlite3
 import logging
 from typing import List, Dict, Any, Optional
 
 from .models import (
-    QueryType,
     Chunk,
     RetrievalResult,
     OntologyAssertion,
@@ -22,6 +20,7 @@ from .fusion import FusionEngine, WeightedFusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import EvidenceValidator, MinimalValidator
 from .classification.evidence_judge import BaseEvidenceJudge, HeuristicEvidenceJudge
+from .classification.evidence_span_classifier import BaseEvidenceSpanClassifier, HeuristicEvidenceSpanClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +39,7 @@ class SVOVerificationEngine:
         validator: EvidenceValidator,
         triple_classifier: Optional[Any] = None,
         evidence_judge: Optional[BaseEvidenceJudge] = None,
+        evidence_span_classifier: Optional[BaseEvidenceSpanClassifier] = None,
         svo_extractor: Optional[Any] = None,
         embedding_model: Optional[Any] = None,
         config: Optional[Any] = None,
@@ -53,6 +53,7 @@ class SVOVerificationEngine:
         self.validator = validator
         self.triple_classifier = triple_classifier
         self.evidence_judge = evidence_judge or HeuristicEvidenceJudge()
+        self.evidence_span_classifier = evidence_span_classifier or HeuristicEvidenceSpanClassifier()
         self.svo_extractor = svo_extractor
         self.embedding_model = embedding_model
         self.config = config
@@ -85,10 +86,6 @@ class SVOVerificationEngine:
     def verify(self, query: str, top_k: int = 10) -> Dict[str, Any]:
         return self.verify_with_ontology(query, top_k=top_k, ontology_assertions=None)
 
-    @staticmethod
-    def _normalize(text: str) -> str:
-        return re.sub(r"\s+", " ", text.lower()).strip()
-
     def _build_assertion_query(self, assertion: OntologyAssertion) -> str:
         return f"{assertion.subject} {assertion.relation} {assertion.object}"
 
@@ -99,39 +96,7 @@ class SVOVerificationEngine:
         source: str,
         retrieval_score: float = 0.0
     ) -> EvidenceSpan:
-        text = self._normalize(chunk.text)
-        subject = self._normalize(assertion.subject)
-        relation = self._normalize(assertion.relation)
-        obj = self._normalize(assertion.object)
-        matched_subject = bool(subject and subject in text)
-        matched_relation = bool(relation and relation in text)
-        matched_object = bool(obj and obj in text)
-        negation = any(token in text for token in [" not ", "no ", "without ", "never ", "fails to", "does not", "cannot"])
-
-        if matched_subject and matched_relation and matched_object:
-            support_type = "refutes" if (negation or assertion.polarity == "must_not_hold") else "supports"
-            confidence = 0.95 if support_type == "supports" else 0.9
-        elif matched_subject and matched_relation:
-            support_type = "partial"
-            confidence = 0.7
-        elif matched_subject or matched_object:
-            support_type = "partial"
-            confidence = 0.5
-        else:
-            support_type = "unknown"
-            confidence = 0.2
-
-        confidence = min(1.0, max(confidence, retrieval_score))
-        return EvidenceSpan(
-            chunk_id=chunk.chunk_id,
-            text=chunk.text,
-            source=source,
-            support_type=support_type,
-            confidence=round(confidence, 4),
-            matched_subject=matched_subject,
-            matched_relation=matched_relation,
-            matched_object=matched_object,
-        )
+        return self.evidence_span_classifier.classify(assertion, chunk, source, retrieval_score)
 
     def _aggregate_triple_verdict(
         self,
@@ -322,14 +287,12 @@ class SVOVerificationEngine:
                 pass
 
         query = self._build_assertion_query(assertion)
-        query_types = self.router.route(query)
+        if self.config and self.config.verbose:
+            logger.debug(f"router diagnostics (unused for gating): {self.router.route(query)}")
         retrieval_results: List[RetrievalResult] = []
-        if QueryType.EXACT_MATCH in query_types:
-            retrieval_results.extend(self.lexical_store.retrieve(query, top_k))
-        if QueryType.COMPLEX in query_types:
-            retrieval_results.extend(self.semantic_store.retrieve(query, top_k))
-        if QueryType.MULTI_HOP in query_types or QueryType.ONTOLOGY in query_types:
-            retrieval_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
+        retrieval_results.extend(self.lexical_store.retrieve(query, top_k))
+        retrieval_results.extend(self.semantic_store.retrieve(query, top_k))
+        retrieval_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
 
         if not retrieval_results and isinstance(self.chunk_store, SQLiteChunkStore):
             conn = sqlite3.connect(self.chunk_store.db_path)
@@ -351,7 +314,7 @@ class SVOVerificationEngine:
         for res in ranked:
             if not res.chunk:
                 continue
-            retrieval_sources.append(res.source)
+            retrieval_sources.extend(res.contributing_sources or [res.source])
             evidence.append(self._chunk_evidence_for_assertion(assertion, res.chunk, res.source, res.score))
 
         heuristic_verdict = self._aggregate_triple_verdict(assertion, evidence, retrieval_sources)
@@ -404,17 +367,12 @@ class SVOVerificationEngine:
         top_k: int = 10,
         ontology_assertions: Optional[List[OntologyAssertion]] = None
     ) -> Dict[str, Any]:
-        query_types = self.router.route(query)
+        if self.config and self.config.verbose:
+            logger.debug(f"router diagnostics (unused for gating): {self.router.route(query)}")
         all_results = []
-
-        if QueryType.EXACT_MATCH in query_types:
-            all_results.extend(self.lexical_store.retrieve(query, top_k))
-        if QueryType.COMPLEX in query_types:
-            all_results.extend(self.semantic_store.retrieve(query, top_k))
-        if QueryType.MULTI_HOP in query_types:
-            all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
-        if QueryType.ONTOLOGY in query_types and ontology_assertions:
-            all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
+        all_results.extend(self.lexical_store.retrieve(query, top_k))
+        all_results.extend(self.semantic_store.retrieve(query, top_k))
+        all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
 
         if ontology_assertions and not all_results and isinstance(self.chunk_store, SQLiteChunkStore):
             conn = sqlite3.connect(self.chunk_store.db_path)

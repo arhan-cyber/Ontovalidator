@@ -57,7 +57,8 @@ class WeightedFusionEngine(FusionEngine):
             fused_results.append(RetrievalResult(
                 chunk_id=chunk_id,
                 score=final_score,
-                source="fusion"
+                source="fusion",
+                contributing_sources=sorted(data["sources"]),
             ))
 
         # 4. Return top-K ranked results

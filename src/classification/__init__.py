@@ -8,6 +8,11 @@ from .evidence_judge import (
     HeuristicEvidenceJudge,
     PromptEvidenceJudge,
 )
+from .evidence_span_classifier import (
+    BaseEvidenceSpanClassifier,
+    HeuristicEvidenceSpanClassifier,
+    NLIEvidenceSpanClassifier,
+)
 from .dataset import (
     TripleClassificationExample,
     TripleDatasetWriter,
@@ -24,6 +29,9 @@ __all__ = [
     "BaseEvidenceJudge",
     "HeuristicEvidenceJudge",
     "PromptEvidenceJudge",
+    "BaseEvidenceSpanClassifier",
+    "HeuristicEvidenceSpanClassifier",
+    "NLIEvidenceSpanClassifier",
     "TripleClassificationExample",
     "TripleDatasetWriter",
     "TripleClassificationResult",

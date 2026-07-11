@@ -227,6 +227,39 @@ class TestValidatorFactory:
         assert isinstance(validator, MinimalValidator)
 
 
+class TestEvidenceSpanClassifierFactory:
+    """Test evidence-span classifier creation."""
+
+    def test_factory_creates_heuristic_classifier_by_default(self, temp_db_path):
+        from src.classification.evidence_span_classifier import HeuristicEvidenceSpanClassifier
+
+        config = PipelineConfig(
+            sqlite_path=temp_db_path,
+            evidence_span_classifier_name="heuristic",
+        )
+
+        classifier = EngineFactory._create_evidence_span_classifier(config)
+
+        assert isinstance(classifier, HeuristicEvidenceSpanClassifier)
+
+    def test_factory_falls_back_to_heuristic_when_nli_model_fails_to_load(self, temp_db_path):
+        from src.classification.evidence_span_classifier import HeuristicEvidenceSpanClassifier
+
+        config = PipelineConfig(
+            sqlite_path=temp_db_path,
+            evidence_span_classifier_name="nli",
+            evidence_span_classifier_model_name="this/model-does-not-exist-and-should-fail",
+        )
+
+        with mock.patch(
+            "transformers.AutoTokenizer.from_pretrained",
+            side_effect=OSError("model not found"),
+        ):
+            classifier = EngineFactory._create_evidence_span_classifier(config)
+
+        assert isinstance(classifier, HeuristicEvidenceSpanClassifier)
+
+
 class TestEngineFactory:
     """Test complete engine factory."""
 

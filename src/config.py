@@ -74,6 +74,10 @@ class PipelineConfig:
     concept_extractor_name: str = "mock"  # "mock" or "transformer"
     validator_name: str = "minimal"  # "minimal" or "transformer"
 
+    # Evidence-span classifier
+    evidence_span_classifier_name: str = "heuristic"  # "heuristic" or "nli"
+    evidence_span_classifier_model_name: Optional[str] = None
+
     # Judge
     enable_lm_judge: bool = False
     judge_model_name: Optional[str] = None
@@ -104,6 +108,8 @@ class PipelineConfig:
             "concept_extractor_name": self.concept_extractor_name,
             "concept_extractor_model_name": self.concept_extractor_model_name,
             "validator_name": self.validator_name,
+            "evidence_span_classifier_name": self.evidence_span_classifier_name,
+            "evidence_span_classifier_model_name": self.evidence_span_classifier_model_name,
             "enable_lm_judge": self.enable_lm_judge,
             "judge_model_name": self.judge_model_name,
             "enable_lm_classifier": self.enable_lm_classifier,
@@ -190,6 +196,8 @@ class PipelineConfig:
         config.concept_extractor_name = os.getenv("ONTO_CONCEPT_EXTRACTOR", "mock")
         config.concept_extractor_model_name = os.getenv("ONTO_CONCEPT_EXTRACTOR_MODEL", None)
         config.validator_name = os.getenv("ONTO_VALIDATOR", "minimal")
+        config.evidence_span_classifier_name = os.getenv("ONTO_EVIDENCE_SPAN_CLASSIFIER", "heuristic")
+        config.evidence_span_classifier_model_name = os.getenv("ONTO_EVIDENCE_SPAN_CLASSIFIER_MODEL", None)
 
         # Judge
         config.enable_lm_judge = os.getenv("ONTO_ENABLE_LM_JUDGE", "false").lower() == "true"
