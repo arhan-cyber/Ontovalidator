@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SVO Triple Verifier</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <h1>SVO Triple Verifier</h1>
+  <button id="settingsToggle" type="button" class="icon-btn" aria-expanded="false" aria-controls="settingsPanel">Settings ⚙</button>
+</header>
+
+<main>
+  <div id="errorBanner" class="error-banner" hidden>
+    <span id="errorText"></span>
+    <button id="errorDismiss" type="button" class="icon-btn">✕</button>
+  </div>
+
+  <form id="validateForm">
+    <section class="card">
+      <label for="rawText">Document Text</label>
+      <textarea id="rawText" placeholder="Paste document text here..." rows="8" required></textarea>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <label>Triples to Validate</label>
+        <button id="addRow" type="button" class="btn secondary">+ Add Row</button>
+      </div>
+      <div id="triplesTable">
+        <div class="triple-header">
+          <span>Subject</span><span>Relation</span><span>Object</span><span></span>
+        </div>
+        <div id="triplesRows"></div>
+      </div>
+    </section>
+
+    <section id="settingsPanel" class="card" hidden>
+      <div class="settings-grid">
+        <div>
+          <label for="embeddingModel">Embedding model</label>
+          <select id="embeddingModel"></select>
+        </div>
+        <div>
+          <label for="svoExtractor">SVO extractor</label>
+          <select id="svoExtractor"></select>
+        </div>
+        <div>
+          <label for="topK">Top K</label>
+          <input id="topK" type="number" min="1" max="50" value="5" />
+        </div>
+      </div>
+    </section>
+
+    <div class="submit-row">
+      <button id="submitBtn" type="submit" class="btn primary">Validate Triples</button>
+      <span id="loadingIndicator" class="loading" hidden>Validating…</span>
+    </div>
+  </form>
+
+  <section id="results" class="card" hidden>
+    <h2>Results</h2>
+    <div id="summary" class="summary"></div>
+    <div id="verdicts"></div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
