@@ -283,8 +283,21 @@ class EngineFactory:
             from .ingestion.extractors import MockSVOExtractor
             svo_extractor = MockSVOExtractor()
 
-        from .ingestion.extractors import MockConceptExtractor
-        concept_extractor = MockConceptExtractor()
+        if config.concept_extractor_name == "transformer":
+            try:
+                from .ingestion.extractors import TransformerConceptExtractor
+                concept_extractor = TransformerConceptExtractor(
+                    model_name=config.concept_extractor_model_name or "google/flan-t5-large"
+                )
+                if config.verbose:
+                    logger.info("Using TransformerConceptExtractor")
+            except Exception as e:
+                logger.warning(f"Failed to create TransformerConceptExtractor: {e}. Using MockConceptExtractor.")
+                from .ingestion.extractors import MockConceptExtractor
+                concept_extractor = MockConceptExtractor()
+        else:
+            from .ingestion.extractors import MockConceptExtractor
+            concept_extractor = MockConceptExtractor()
 
         # Create ingestor
         ingestor = DataIngestor(

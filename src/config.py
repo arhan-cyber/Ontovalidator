@@ -71,11 +71,15 @@ class PipelineConfig:
     # Model selection
     embedding_model_name: str = "simple"  # "simple" or "transformer"
     svo_extractor_name: str = "mock"  # "mock" or "transformer"
+    concept_extractor_name: str = "mock"  # "mock" or "transformer"
     validator_name: str = "minimal"  # "minimal" or "transformer"
 
     # Judge
     enable_lm_judge: bool = False
     judge_model_name: Optional[str] = None
+
+    # Concept extractor model
+    concept_extractor_model_name: Optional[str] = None
 
     # Backward-compatible classifier flags
     enable_lm_classifier: bool = False
@@ -97,6 +101,8 @@ class PipelineConfig:
             "neo4j": self.neo4j.to_dict(),
             "embedding_model_name": self.embedding_model_name,
             "svo_extractor_name": self.svo_extractor_name,
+            "concept_extractor_name": self.concept_extractor_name,
+            "concept_extractor_model_name": self.concept_extractor_model_name,
             "validator_name": self.validator_name,
             "enable_lm_judge": self.enable_lm_judge,
             "judge_model_name": self.judge_model_name,
@@ -181,6 +187,8 @@ class PipelineConfig:
         # Models
         config.embedding_model_name = os.getenv("ONTO_EMBEDDING_MODEL", "simple")
         config.svo_extractor_name = os.getenv("ONTO_SVO_EXTRACTOR", "mock")
+        config.concept_extractor_name = os.getenv("ONTO_CONCEPT_EXTRACTOR", "mock")
+        config.concept_extractor_model_name = os.getenv("ONTO_CONCEPT_EXTRACTOR_MODEL", None)
         config.validator_name = os.getenv("ONTO_VALIDATOR", "minimal")
 
         # Judge

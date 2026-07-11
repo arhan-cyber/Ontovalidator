@@ -135,9 +135,17 @@ class DataIngestor:
                 svo.source_chunk_ids = [chunk.chunk_id]
                 all_svos.append(svo)
 
-            concepts = self.concept_extractor.extract_concepts(chunk.text)
-            chunk.metadata["provides"] = concepts["provides"]
-            chunk.metadata["depends_on"] = concepts["depends_on"]
+        if hasattr(self.concept_extractor, "extract_concepts_batch"):
+            chunk_texts = [c.text for c in chunks]
+            concepts_batch = self.concept_extractor.extract_concepts_batch(chunk_texts)
+            for chunk, concepts in zip(chunks, concepts_batch):
+                chunk.metadata["provides"] = concepts.get("provides", [])
+                chunk.metadata["depends_on"] = concepts.get("depends_on", [])
+        else:
+            for chunk in chunks:
+                concepts = self.concept_extractor.extract_concepts(chunk.text)
+                chunk.metadata["provides"] = concepts.get("provides", [])
+                chunk.metadata["depends_on"] = concepts.get("depends_on", [])
 
         print(f"  -> Extracted {len(all_svos)} SVO relations and concepts.")
 
@@ -232,6 +240,7 @@ class DataIngestor:
 
                     provides = chunk.metadata.get("provides", [])
                     for cp in provides:
+                        concept_name = cp.strip().lower() if isinstance(cp, str) else str(cp).strip().lower()
                         session.run(
                             """
                             MERGE (c:Chunk {id: $chunk_id})
@@ -239,11 +248,12 @@ class DataIngestor:
                             MERGE (c)-[:PROVIDES]->(cp)
                             """,
                             chunk_id=chunk.chunk_id,
-                            concept_name=cp
+                            concept_name=concept_name
                         )
 
                     depends_on = chunk.metadata.get("depends_on", [])
                     for cp in depends_on:
+                        concept_name = cp.strip().lower() if isinstance(cp, str) else str(cp).strip().lower()
                         session.run(
                             """
                             MERGE (c:Chunk {id: $chunk_id})
@@ -251,7 +261,7 @@ class DataIngestor:
                             MERGE (c)-[:DEPENDS_ON]->(cp)
                             """,
                             chunk_id=chunk.chunk_id,
-                            concept_name=cp
+                            concept_name=concept_name
                         )
                 except Exception as e:
                     print(f"  [!] Neo4j write failed for chunk {chunk.chunk_id}: {e}")
