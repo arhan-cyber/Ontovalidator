@@ -147,17 +147,21 @@ class DataIngestor:
                 svo.source_chunk_ids = [chunk.chunk_id]
                 all_svos.append(svo)
 
-        if hasattr(self.concept_extractor, "extract_concepts_batch"):
-            chunk_texts = [c.text for c in chunks]
-            concepts_batch = self.concept_extractor.extract_concepts_batch(chunk_texts)
-            for chunk, concepts in zip(chunks, concepts_batch):
-                chunk.metadata["provides"] = concepts.get("provides", [])
-                chunk.metadata["depends_on"] = concepts.get("depends_on", [])
-        else:
-            for chunk in chunks:
-                concepts = self.concept_extractor.extract_concepts(chunk.text)
-                chunk.metadata["provides"] = concepts.get("provides", [])
-                chunk.metadata["depends_on"] = concepts.get("depends_on", [])
+        try:
+            if hasattr(self.concept_extractor, "extract_concepts_batch"):
+                chunk_texts = [c.text for c in chunks]
+                concepts_batch = self.concept_extractor.extract_concepts_batch(chunk_texts)
+                for chunk, concepts in zip(chunks, concepts_batch):
+                    chunk.metadata["provides"] = concepts.get("provides", [])
+                    chunk.metadata["depends_on"] = concepts.get("depends_on", [])
+            else:
+                for chunk in chunks:
+                    concepts = self.concept_extractor.extract_concepts(chunk.text)
+                    chunk.metadata["provides"] = concepts.get("provides", [])
+                    chunk.metadata["depends_on"] = concepts.get("depends_on", [])
+        except Exception as e:
+            if self.config and self.config.verbose:
+                print(f"  [!] Concept extraction failed: {type(e).__name__}: {e}")
 
         print(f"  -> Extracted {len(all_svos)} SVO relations and concepts.")
 

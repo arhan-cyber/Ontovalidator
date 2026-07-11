@@ -475,6 +475,21 @@ class SVOVerificationEngine:
             if self.config and self.config.verbose:
                 logger.info(f"Using configured embedding model: {embedding_model.__class__.__name__}")
 
+        # Create concept extractor from config
+        if self.config and self.config.concept_extractor_name == "transformer":
+            try:
+                from .ingestion.extractors import TransformerConceptExtractor
+                concept_extractor = TransformerConceptExtractor(
+                    model_name=self.config.concept_extractor_model_name or "google/flan-t5-large"
+                )
+                if self.config.verbose:
+                    logger.info("Using TransformerConceptExtractor")
+            except Exception as e:
+                logger.warning(f"Failed to create TransformerConceptExtractor: {e}. Using MockConceptExtractor.")
+                concept_extractor = MockConceptExtractor()
+        else:
+            concept_extractor = MockConceptExtractor()
+
         # Get backend clients from configured retrievers if they're production types
         es_client = None
         milvus_collection = None
@@ -496,7 +511,7 @@ class SVOVerificationEngine:
             neo4j_driver=neo4j_driver,
             embedding_model=embedding_model,
             svo_extractor=svo_extractor,
-            concept_extractor=MockConceptExtractor(),
+            concept_extractor=concept_extractor,
             config=self.config,
         )
 
