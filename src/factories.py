@@ -213,7 +213,7 @@ class EngineFactory:
         """Create SVO extractor based on config."""
         if config.svo_extractor_name == "transformer":
             try:
-                from .ingestion.extractors import TransformerSVOExtractor
+                from .ingestion.embeddings import TransformerSVOExtractor
                 logger.info("Using TransformerSVOExtractor")
                 return TransformerSVOExtractor()
             except Exception as e:
