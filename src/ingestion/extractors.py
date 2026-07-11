@@ -61,7 +61,40 @@ class MockConceptExtractor:
 
 
 class TransformerConceptExtractor:
-    """LLM-based concept extraction with document-level deduplication."""
+    """LLM-based concept extraction with document-level deduplication.
+
+    Uses few-shot prompts (one worked example per prompt) rather than zero-shot
+    instructions. Zero-shot prompting on flan-t5-large was observed to make the
+    "provides" prompt echo the entire input sentence back as a single "concept"
+    (no commas in its output for the comma-split parser to break on) - the parallel
+    "depends_on" prompt happened to get a clean short list, but "provides" didn't,
+    so the fix here is symmetric worked examples for both. See
+    remote server scripts/test_concept_graph.py for the side-by-side comparison
+    that led to this: zero-shot produced a 23-word "concept" (the whole sentence),
+    few-shot produced 'hash table'.
+    """
+
+    MAX_CONCEPT_WORDS = 6  # defensive guard: reject anything longer as clearly not a term
+
+    _PROVIDES_PROMPT = (
+        "Extract short key terms (2-4 words each) that this text defines or "
+        "introduces. Output ONLY a comma-separated list of terms, nothing else.\n\n"
+        "Text: A binary search tree is a data structure where each node has at "
+        "most two children, and left children are smaller than their parent.\n"
+        "Terms: binary search tree\n\n"
+        "Text: {text}\n"
+        "Terms:"
+    )
+    _DEPENDS_ON_PROMPT = (
+        "Extract short key terms (2-4 words each) that this text assumes or "
+        "refers to but does not define. Output ONLY a comma-separated list of "
+        "terms, nothing else.\n\n"
+        "Text: Binary search trees are often used to implement balanced trees "
+        "such as AVL trees and red-black trees.\n"
+        "Terms: balanced trees, AVL trees, red-black trees\n\n"
+        "Text: {text}\n"
+        "Terms:"
+    )
 
     def __init__(self, model_name: str = "google/flan-t5-large"):
         from transformers import T5Tokenizer, AutoModelForSeq2SeqLM
@@ -82,17 +115,20 @@ class TransformerConceptExtractor:
         if not text or not text.strip():
             return concepts
 
-        provides_prompt = f"Extract key concepts that are introduced or defined in this text. List as comma-separated terms:\n{text[:512]}"
-        depends_on_prompt = f"Extract concepts that this text refers to or assumes but does not define. List as comma-separated terms:\n{text[:512]}"
+        prompts = {
+            "provides": self._PROVIDES_PROMPT.format(text=text[:512]),
+            "depends_on": self._DEPENDS_ON_PROMPT.format(text=text[:512]),
+        }
 
-        for prompt_type, prompt in [("provides", provides_prompt), ("depends_on", depends_on_prompt)]:
+        for prompt_type, prompt in prompts.items():
             try:
-                inputs = self.tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
+                inputs = self.tokenizer(prompt, return_tensors="pt", max_length=768, truncation=True)
                 with torch.no_grad():
                     outputs = self.model.generate(**inputs, max_length=128, num_beams=1)
                 output_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-                extracted = [term.strip() for term in output_text.split(",") if term.strip()]
-                concepts[prompt_type] = extracted
+                terms = [term.strip() for term in output_text.split(",") if term.strip()]
+                terms = [t for t in terms if len(t.split()) <= self.MAX_CONCEPT_WORDS]
+                concepts[prompt_type] = terms
             except Exception:
                 pass
 
