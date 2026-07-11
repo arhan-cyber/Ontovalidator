@@ -112,6 +112,10 @@ textarea, input, select {
   align-items: center;
 }
 
+.error-banner[hidden] {
+  display: none;
+}
+
 .summary {
   display: flex;
   flex-wrap: wrap;

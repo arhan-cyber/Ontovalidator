@@ -58,6 +58,12 @@ class EngineFactory:
         # Create validator
         validator = EngineFactory._create_validator(config)
 
+        # Create embedding model and SVO extractor so validate_triples_batch's internal
+        # ingestion step actually uses the configured models instead of silently falling
+        # back to SimpleEmbeddingModel/MockSVOExtractor (see engine.py:464-476).
+        embedding_model = EngineFactory._create_embedding_model(config)
+        svo_extractor = EngineFactory._create_svo_extractor(config)
+
         # Create evidence judge
         evidence_judge = HeuristicEvidenceJudge()
         if config.enable_lm_judge or config.enable_lm_classifier:
@@ -96,6 +102,8 @@ class EngineFactory:
             validator=validator,
             triple_classifier=triple_classifier,
             evidence_judge=evidence_judge,
+            svo_extractor=svo_extractor,
+            embedding_model=embedding_model,
             config=config,
         )
 
@@ -191,16 +199,29 @@ class EngineFactory:
         if config.embedding_model_name == "transformer":
             try:
                 from .ingestion.embeddings import TransformerEmbeddingModel
-                if config.verbose:
-                    logger.info("Using TransformerEmbeddingModel")
+                logger.info("Using TransformerEmbeddingModel")
                 return TransformerEmbeddingModel()
             except Exception as e:
                 logger.warning(f"Failed to create TransformerEmbeddingModel: {e}. Falling back to SimpleEmbeddingModel.")
 
-        if config.verbose:
-            logger.info("Using SimpleEmbeddingModel")
+        logger.info("Using SimpleEmbeddingModel")
         from .ingestion.embeddings import SimpleEmbeddingModel
         return SimpleEmbeddingModel()
+
+    @staticmethod
+    def _create_svo_extractor(config: PipelineConfig) -> Any:
+        """Create SVO extractor based on config."""
+        if config.svo_extractor_name == "transformer":
+            try:
+                from .ingestion.extractors import TransformerSVOExtractor
+                logger.info("Using TransformerSVOExtractor")
+                return TransformerSVOExtractor()
+            except Exception as e:
+                logger.warning(f"Failed to create TransformerSVOExtractor: {e}. Falling back to MockSVOExtractor.")
+
+        logger.info("Using MockSVOExtractor")
+        from .ingestion.extractors import MockSVOExtractor
+        return MockSVOExtractor()
 
     @staticmethod
     def create_ingestor(config: PipelineConfig) -> Any:
@@ -268,20 +289,7 @@ class EngineFactory:
 
         # Create models
         embedding_model = EngineFactory._create_embedding_model(config)
-
-        if config.svo_extractor_name == "transformer":
-            try:
-                from .ingestion.extractors import TransformerSVOExtractor
-                svo_extractor = TransformerSVOExtractor()
-                if config.verbose:
-                    logger.info("Using TransformerSVOExtractor")
-            except Exception as e:
-                logger.warning(f"Failed to create TransformerSVOExtractor: {e}. Using MockSVOExtractor.")
-                from .ingestion.extractors import MockSVOExtractor
-                svo_extractor = MockSVOExtractor()
-        else:
-            from .ingestion.extractors import MockSVOExtractor
-            svo_extractor = MockSVOExtractor()
+        svo_extractor = EngineFactory._create_svo_extractor(config)
 
         if config.concept_extractor_name == "transformer":
             try:
