@@ -1,0 +1,360 @@
+INFO:     Started server process [726377]
+INFO:     Waiting for application startup.
+2026-07-12 05:38:27,069 INFO src.factories: Creating verification engine with backend_mode=auto
+2026-07-12 05:38:27,069 INFO src.factories: Using SQLite for lexical retrieval
+2026-07-12 05:38:27,070 INFO src.factories: Using SQLite for semantic retrieval
+2026-07-12 05:38:27,070 INFO src.factories: Using SQLite for graph retrieval
+2026-07-12 05:38:27,075 INFO src.factories: Using TransformerValidator
+2026-07-12 05:38:47,816 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:47,825 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:48,039 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:48,257 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:48,494 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-07-12 05:38:48,495 WARNING huggingface_hub.utils._http: Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-07-12 05:38:48,503 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 18328.82it/s]
+2026-07-12 05:38:48,769 INFO src.factories: Using SimpleEmbeddingModel
+2026-07-12 05:38:48,770 INFO src.factories: Using MockSVOExtractor
+2026-07-12 05:38:48,976 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:48,985 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:49,198 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:49,208 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:49,426 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:49,639 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:49,874 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:49,884 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 8010.86it/s]
+2026-07-12 05:38:49,933 INFO src.factories: Using NLIEvidenceSpanClassifier
+2026-07-12 05:38:50,198 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:50,207 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:50,423 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:50,633 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:51,055 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:51,062 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 9370.83it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:38:51,550 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:51,559 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:51,569 INFO src.factories: Few-shot LM evidence judge enabled
+2026-07-12 05:38:51,569 INFO src.engine: SVOVerificationEngine initialized with config: backend_mode=auto
+2026-07-12 05:38:51,569 INFO src.factories: Verification engine created successfully
+2026-07-12 05:38:51,569 INFO src.factories: Backend status: {'lexical': 'SQLiteLexicalRetriever', 'semantic': 'SQLiteSemanticRetriever', 'graph': 'SQLiteGraphRetriever'}
+2026-07-12 05:38:51,569 INFO src.factories: Creating verification engine with backend_mode=auto
+2026-07-12 05:38:51,569 INFO src.factories: Using SQLite for lexical retrieval
+2026-07-12 05:38:51,569 INFO src.factories: Using SQLite for semantic retrieval
+2026-07-12 05:38:51,570 INFO src.factories: Using SQLite for graph retrieval
+2026-07-12 05:38:51,571 INFO src.factories: Using TransformerValidator
+2026-07-12 05:38:51,780 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:51,790 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:52,007 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:52,220 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:52,457 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:52,465 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 7655.99it/s]
+2026-07-12 05:38:52,524 INFO src.factories: Using SimpleEmbeddingModel
+2026-07-12 05:38:52,524 INFO src.factories: Using TransformerSVOExtractor
+2026-07-12 05:38:52,728 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-small/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:52,736 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-small/0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:52,952 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-small/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:53,164 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-small/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:53,766 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-small/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:53,774 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-small/0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/190 [00:00<?, ?it/s]Loading weights: 100%|██████████| 190/190 [00:00<00:00, 7543.14it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:38:54,083 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-small/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:54,090 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-small/0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:54,302 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:54,310 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:54,525 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:54,534 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:54,757 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:54,976 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:55,286 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:55,293 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 7689.19it/s]
+2026-07-12 05:38:55,340 INFO src.factories: Using NLIEvidenceSpanClassifier
+2026-07-12 05:38:55,550 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:55,560 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:55,777 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:55,988 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:56,402 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:56,411 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 8888.16it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:38:56,865 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:56,875 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:56,881 INFO src.factories: Few-shot LM evidence judge enabled
+2026-07-12 05:38:56,881 INFO src.engine: SVOVerificationEngine initialized with config: backend_mode=auto
+2026-07-12 05:38:56,881 INFO src.factories: Verification engine created successfully
+2026-07-12 05:38:56,881 INFO src.factories: Backend status: {'lexical': 'SQLiteLexicalRetriever', 'semantic': 'SQLiteSemanticRetriever', 'graph': 'SQLiteGraphRetriever'}
+2026-07-12 05:38:56,881 INFO src.factories: Creating verification engine with backend_mode=auto
+2026-07-12 05:38:56,881 INFO src.factories: Using SQLite for lexical retrieval
+2026-07-12 05:38:56,881 INFO src.factories: Using SQLite for semantic retrieval
+2026-07-12 05:38:56,881 INFO src.factories: Using SQLite for graph retrieval
+2026-07-12 05:38:56,883 INFO src.factories: Using TransformerValidator
+2026-07-12 05:38:57,091 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:57,100 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:57,315 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:57,523 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:57,762 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:57,770 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 7675.79it/s]
+2026-07-12 05:38:57,829 INFO src.factories: Using TransformerEmbeddingModel
+2026-07-12 05:38:58,039 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:58,259 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:58,469 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:38:58,682 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:58,891 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:38:59,190 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/100 [00:00<?, ?it/s]Loading weights: 100%|██████████| 100/100 [00:00<00:00, 7726.59it/s]
+[transformers] [1mDistilBertModel LOAD REPORT[0m from: distilbert-base-uncased
+Key                     | Status     |  | 
+------------------------+------------+--+-
+vocab_layer_norm.bias   | UNEXPECTED |  | 
+vocab_layer_norm.weight | UNEXPECTED |  | 
+vocab_projector.bias    | UNEXPECTED |  | 
+vocab_transform.weight  | UNEXPECTED |  | 
+vocab_transform.bias    | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+2026-07-12 05:38:59,428 INFO src.factories: Using MockSVOExtractor
+2026-07-12 05:38:59,636 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:59,645 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+2026-07-12 05:38:59,922 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:38:59,931 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:00,143 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:00,360 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:00,591 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:00,598 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 8080.31it/s]
+2026-07-12 05:39:00,644 INFO src.factories: Using NLIEvidenceSpanClassifier
+2026-07-12 05:39:00,891 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:00,900 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:01,115 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:01,342 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:01,759 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:01,769 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 8310.71it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:39:02,234 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:02,243 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:02,251 INFO src.factories: Few-shot LM evidence judge enabled
+2026-07-12 05:39:02,251 INFO src.engine: SVOVerificationEngine initialized with config: backend_mode=auto
+2026-07-12 05:39:02,251 INFO src.factories: Verification engine created successfully
+2026-07-12 05:39:02,251 INFO src.factories: Backend status: {'lexical': 'SQLiteLexicalRetriever', 'semantic': 'SQLiteSemanticRetriever', 'graph': 'SQLiteGraphRetriever'}
+2026-07-12 05:39:02,251 INFO src.factories: Creating verification engine with backend_mode=auto
+2026-07-12 05:39:02,251 INFO src.factories: Using SQLite for lexical retrieval
+2026-07-12 05:39:02,251 INFO src.factories: Using SQLite for semantic retrieval
+2026-07-12 05:39:02,251 INFO src.factories: Using SQLite for graph retrieval
+2026-07-12 05:39:02,253 INFO src.factories: Using TransformerValidator
+2026-07-12 05:39:02,459 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:02,469 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:02,683 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:02,893 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:03,126 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:03,133 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 8229.25it/s]
+2026-07-12 05:39:03,188 INFO src.factories: Using TransformerEmbeddingModel
+2026-07-12 05:39:03,402 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:03,615 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:03,824 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:04,040 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:04,250 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:04,597 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/100 [00:00<?, ?it/s]Loading weights: 100%|██████████| 100/100 [00:00<00:00, 7184.73it/s]
+[transformers] [1mDistilBertModel LOAD REPORT[0m from: distilbert-base-uncased
+Key                     | Status     |  | 
+------------------------+------------+--+-
+vocab_layer_norm.bias   | UNEXPECTED |  | 
+vocab_layer_norm.weight | UNEXPECTED |  | 
+vocab_projector.bias    | UNEXPECTED |  | 
+vocab_transform.weight  | UNEXPECTED |  | 
+vocab_transform.bias    | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+2026-07-12 05:39:04,841 INFO src.factories: Using TransformerSVOExtractor
+2026-07-12 05:39:05,051 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-small/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:05,060 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-small/0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:05,307 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-small/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:05,517 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-small/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:05,936 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-small/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:05,946 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-small/0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/190 [00:00<?, ?it/s]Loading weights: 100%|██████████| 190/190 [00:00<00:00, 8350.46it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:39:06,246 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-small/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:06,255 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-small/0fc9ddf78a1e988dac52e2dac162b0ede4fd74ab/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:06,468 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:06,475 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:06,690 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:06,699 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:06,914 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:07,124 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/typeform/distilbert-base-uncased-mnli/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:07,354 INFO httpx: HTTP Request: HEAD https://huggingface.co/typeform/distilbert-base-uncased-mnli/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:07,362 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/typeform/distilbert-base-uncased-mnli/cfa538a0fddbbd978fefe8966c1aeff7ad409c90/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/104 [00:00<?, ?it/s]Loading weights: 100%|██████████| 104/104 [00:00<00:00, 8101.32it/s]
+2026-07-12 05:39:07,410 INFO src.factories: Using NLIEvidenceSpanClassifier
+2026-07-12 05:39:07,616 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:07,625 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:07,837 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:08,045 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:08,465 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:08,473 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 9202.81it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:39:09,091 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:09,100 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:09,107 INFO src.factories: Few-shot LM evidence judge enabled
+2026-07-12 05:39:09,108 INFO src.engine: SVOVerificationEngine initialized with config: backend_mode=auto
+2026-07-12 05:39:09,108 INFO src.factories: Verification engine created successfully
+2026-07-12 05:39:09,108 INFO src.factories: Backend status: {'lexical': 'SQLiteLexicalRetriever', 'semantic': 'SQLiteSemanticRetriever', 'graph': 'SQLiteGraphRetriever'}
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8010 (Press CTRL+C to quit)
+INFO:     127.0.0.1:50156 - "GET /config HTTP/1.1" 200 OK
+2026-07-12 05:39:24,924 INFO src.integration.health_check_runner: Elasticsearch is disabled in configuration.
+2026-07-12 05:39:24,924 INFO src.integration.health_check_runner: Neo4j is disabled in configuration.
+2026-07-12 05:39:24,925 INFO src.integration.health_check_runner: Milvus is disabled in configuration.
+2026-07-12 05:39:24,926 INFO src.integration.health_check_runner: Checking SQLite at /home/arhan.khade/placement/Ontovalidator/final_results/onto_run.db...
+2026-07-12 05:39:24,929 INFO src.integration.health_check_runner: Health check complete. Overall status: DEGRADED
+INFO:     127.0.0.1:50170 - "GET /health?force=true HTTP/1.1" 200 OK
+2026-07-12 05:39:31,336 INFO src.engine: Using configured SVO extractor: TransformerSVOExtractor
+2026-07-12 05:39:31,336 INFO src.engine: Using configured embedding model: TransformerEmbeddingModel
+2026-07-12 05:39:36,562 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:36,570 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:36,785 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:36,997 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:37,423 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:37,431 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 8921.77it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:39:38,089 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:38,097 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:38,106 INFO src.engine: Using TransformerConceptExtractor
+2026-07-12 05:39:40,011 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:39:40,224 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:40,431 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:39:40,638 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:39:40,845 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:39:41,103 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/config.json "HTTP/1.1 200 OK"
+DataIngestor initialized with config: backend_mode=auto
+Starting ingestion for Document: aspirin_doc
+  -> Generated 3 chunks.
+  -> Generated vector embeddings.
+Loading weights:   0%|          | 0/100 [00:00<?, ?it/s]Loading weights: 100%|██████████| 100/100 [00:00<00:00, 13725.27it/s]
+[transformers] [1mDistilBertModel LOAD REPORT[0m from: distilbert-base-uncased
+Key                     | Status     |  | 
+------------------------+------------+--+-
+vocab_layer_norm.bias   | UNEXPECTED |  | 
+vocab_layer_norm.weight | UNEXPECTED |  | 
+vocab_projector.bias    | UNEXPECTED |  | 
+vocab_transform.weight  | UNEXPECTED |  | 
+vocab_transform.bias    | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  -> Extracted 0 SVO relations and concepts.
+  -> Populated SQLite (Late Materialization ChunkStore).
+  [!] Mock Elasticsearch write failed: 'NoneType' object has no attribute 'bulk'
+  -> Populated Elasticsearch (Lexical Store).
+  [!] Milvus write failed: 'NoneType' object has no attribute 'insert'
+  -> Populated Milvus (Semantic Store).
+  [!] Neo4j write skipped: No driver provided.
+  -> Populated Neo4j (Knowledge Graph Store).
+Successfully completed ingestion for aspirin_doc!
+INFO:     127.0.0.1:57586 - "POST /validate HTTP/1.1" 200 OK
+2026-07-12 05:39:58,515 INFO src.engine: Using configured SVO extractor: TransformerSVOExtractor
+2026-07-12 05:39:58,516 INFO src.engine: Using configured embedding model: TransformerEmbeddingModel
+2026-07-12 05:40:03,743 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:03,752 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:40:03,969 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:40:04,227 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:40:04,546 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:04,554 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 18749.17it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:40:04,887 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:04,895 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:40:04,900 INFO src.engine: Using TransformerConceptExtractor
+2026-07-12 05:40:06,413 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:40:06,697 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:06,901 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:40:07,112 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:07,339 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:40:07,598 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/config.json "HTTP/1.1 200 OK"
+DataIngestor initialized with config: backend_mode=auto
+Starting ingestion for Document: hashtable_doc
+  -> Generated 3 chunks.
+  -> Generated vector embeddings.
+Loading weights:   0%|          | 0/100 [00:00<?, ?it/s]Loading weights: 100%|██████████| 100/100 [00:00<00:00, 11616.32it/s]
+[transformers] [1mDistilBertModel LOAD REPORT[0m from: distilbert-base-uncased
+Key                     | Status     |  | 
+------------------------+------------+--+-
+vocab_layer_norm.bias   | UNEXPECTED |  | 
+vocab_layer_norm.weight | UNEXPECTED |  | 
+vocab_projector.bias    | UNEXPECTED |  | 
+vocab_transform.weight  | UNEXPECTED |  | 
+vocab_transform.bias    | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  -> Extracted 0 SVO relations and concepts.
+  -> Populated SQLite (Late Materialization ChunkStore).
+  [!] Mock Elasticsearch write failed: 'NoneType' object has no attribute 'bulk'
+  -> Populated Elasticsearch (Lexical Store).
+  [!] Milvus write failed: 'NoneType' object has no attribute 'insert'
+  -> Populated Milvus (Semantic Store).
+  [!] Neo4j write skipped: No driver provided.
+  -> Populated Neo4j (Knowledge Graph Store).
+Successfully completed ingestion for hashtable_doc!
+INFO:     127.0.0.1:32934 - "POST /validate HTTP/1.1" 200 OK
+2026-07-12 05:40:17,689 INFO src.engine: Using configured SVO extractor: TransformerSVOExtractor
+2026-07-12 05:40:17,690 INFO src.engine: Using configured embedding model: TransformerEmbeddingModel
+2026-07-12 05:40:22,912 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:22,920 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:40:23,132 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:40:23,339 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/google/flan-t5-large/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:40:23,787 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:23,795 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/config.json "HTTP/1.1 200 OK"
+Loading weights:   0%|          | 0/558 [00:00<?, ?it/s]Loading weights: 100%|██████████| 558/558 [00:00<00:00, 18694.36it/s]
+[transformers] The tied weights mapping and config for this model specifies to tie shared.weight to lm_head.weight, but both are present in the checkpoints with different values, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning.
+2026-07-12 05:40:24,131 INFO httpx: HTTP Request: HEAD https://huggingface.co/google/flan-t5-large/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:24,138 INFO httpx: HTTP Request: HEAD https://huggingface.co/api/resolve-cache/models/google/flan-t5-large/0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a/generation_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:40:24,141 INFO src.engine: Using TransformerConceptExtractor
+2026-07-12 05:40:25,965 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-07-12 05:40:26,174 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:26,379 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-07-12 05:40:26,583 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 307 Temporary Redirect"
+2026-07-12 05:40:26,793 INFO httpx: HTTP Request: GET https://huggingface.co/api/models/distilbert/distilbert-base-uncased/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-07-12 05:40:27,047 INFO httpx: HTTP Request: HEAD https://huggingface.co/distilbert-base-uncased/resolve/main/config.json "HTTP/1.1 200 OK"
+DataIngestor initialized with config: backend_mode=auto
+Starting ingestion for Document: climate_doc
+  -> Generated 3 chunks.
+  -> Generated vector embeddings.
+Loading weights:   0%|          | 0/100 [00:00<?, ?it/s]Loading weights: 100%|██████████| 100/100 [00:00<00:00, 10390.17it/s]
+[transformers] [1mDistilBertModel LOAD REPORT[0m from: distilbert-base-uncased
+Key                     | Status     |  | 
+------------------------+------------+--+-
+vocab_layer_norm.bias   | UNEXPECTED |  | 
+vocab_layer_norm.weight | UNEXPECTED |  | 
+vocab_projector.bias    | UNEXPECTED |  | 
+vocab_transform.weight  | UNEXPECTED |  | 
+vocab_transform.bias    | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  -> Extracted 0 SVO relations and concepts.
+  -> Populated SQLite (Late Materialization ChunkStore).
+  [!] Mock Elasticsearch write failed: 'NoneType' object has no attribute 'bulk'
+  -> Populated Elasticsearch (Lexical Store).
+  [!] Milvus write failed: 'NoneType' object has no attribute 'insert'
+  -> Populated Milvus (Semantic Store).
+  [!] Neo4j write skipped: No driver provided.
+  -> Populated Neo4j (Knowledge Graph Store).
+Successfully completed ingestion for climate_doc!
+INFO:     127.0.0.1:53142 - "POST /validate HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [726377]

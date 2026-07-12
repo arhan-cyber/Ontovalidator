@@ -1,0 +1,13 @@
+{
+  "document_id": "aspirin_doc",
+  "raw_text": "Aspirin treats headache and reduces fever. Aspirin does not treat malaria. Ibuprofen is also a common pain reliever, but it is not the same drug as aspirin.",
+  "triples": [
+    {"assertion_id": "t1", "subject": "Aspirin", "relation": "treats", "object": "headache"},
+    {"assertion_id": "t2", "subject": "Aspirin", "relation": "treats", "object": "malaria"},
+    {"assertion_id": "t3", "subject": "Ibuprofen", "relation": "reduces", "object": "fever"},
+    {"assertion_id": "t4", "subject": "Aspirin", "relation": "cures", "object": "diabetes"}
+  ],
+  "top_k": 5,
+  "embedding_model": "transformer",
+  "svo_extractor": "transformer"
+}

@@ -1,0 +1,37 @@
+{
+    "timestamp": "2026-07-12T00:09:24.930004",
+    "overall_status": "DEGRADED",
+    "backends": {
+        "elasticsearch": {
+            "backend_name": "elasticsearch",
+            "is_healthy": false,
+            "latency_ms": -1,
+            "error_message": "Disabled in configuration",
+            "timestamp": "2026-07-12T00:09:24.924930"
+        },
+        "neo4j": {
+            "backend_name": "neo4j",
+            "is_healthy": false,
+            "latency_ms": -1,
+            "error_message": "Disabled in configuration",
+            "timestamp": "2026-07-12T00:09:24.925058"
+        },
+        "milvus": {
+            "backend_name": "milvus",
+            "is_healthy": false,
+            "latency_ms": -1,
+            "error_message": "Disabled in configuration",
+            "timestamp": "2026-07-12T00:09:24.925984"
+        },
+        "sqlite": {
+            "backend_name": "sqlite",
+            "is_healthy": true,
+            "latency_ms": 3.06,
+            "error_message": null,
+            "timestamp": "2026-07-12T00:09:24.929227"
+        }
+    },
+    "recommendations": [
+        "No production backends available. Using SQLite fallback."
+    ]
+}

@@ -1,0 +1,11 @@
+{
+  "document_id": "climate_doc",
+  "raw_text": "Rising global temperatures are causing polar ice caps to melt at an accelerating rate. Melting ice caps contribute to rising sea levels, which threaten coastal cities. Renewable energy adoption has grown significantly in the last decade, partially offsetting emissions growth.",
+  "triples": [
+    {"assertion_id": "u1", "subject": "quantum computers", "relation": "solve", "object": "climate change"},
+    {"assertion_id": "u2", "subject": "renewable energy", "relation": "offsets", "object": "emissions"}
+  ],
+  "top_k": 5,
+  "embedding_model": "transformer",
+  "svo_extractor": "transformer"
+}

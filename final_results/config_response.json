@@ -1,0 +1,22 @@
+{
+    "backend_mode": "auto",
+    "sqlite_path": "/home/arhan.khade/placement/Ontovalidator/final_results/onto_run.db",
+    "embedding_model_name": "transformer",
+    "svo_extractor_name": "transformer",
+    "validator_name": "transformer",
+    "enable_lm_judge": true,
+    "enable_lm_classifier": false,
+    "backend_status": {
+        "lexical": "SQLiteLexicalRetriever",
+        "semantic": "SQLiteSemanticRetriever",
+        "graph": "SQLiteGraphRetriever"
+    },
+    "available_embedding_models": [
+        "simple",
+        "transformer"
+    ],
+    "available_svo_extractors": [
+        "mock",
+        "transformer"
+    ]
+}

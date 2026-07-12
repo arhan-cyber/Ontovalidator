@@ -1,0 +1,11 @@
+{
+  "document_id": "hashtable_doc",
+  "raw_text": "A hash table is a data structure that provides constant-time key-value lookup by using a hash function to map keys to array indices. A Python dictionary is implemented internally using a hash table, giving it average O(1) time complexity for lookups and insertions. Caching systems in web servers frequently store frequently accessed values in a Python dictionary to avoid recomputation.",
+  "triples": [
+    {"assertion_id": "diag_t1", "subject": "hash table", "relation": "required for", "object": "constant-time lookup"},
+    {"assertion_id": "diag_t2", "subject": "caching systems", "relation": "depends on", "object": "hash function"}
+  ],
+  "top_k": 5,
+  "embedding_model": "transformer",
+  "svo_extractor": "transformer"
+}
