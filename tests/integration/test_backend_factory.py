@@ -236,11 +236,27 @@ class TestEvidenceSpanClassifierFactory:
         config = PipelineConfig(
             sqlite_path=temp_db_path,
             evidence_span_classifier_name="heuristic",
+            enable_temporal_reasoning=False,
         )
 
         classifier = EngineFactory._create_evidence_span_classifier(config)
 
         assert isinstance(classifier, HeuristicEvidenceSpanClassifier)
+
+    def test_factory_wraps_classifier_when_temporal_reasoning_enabled(self, temp_db_path):
+        from src.classification.evidence_span_classifier import HeuristicEvidenceSpanClassifier
+        from src.classification.temporal_evidence_classifier import TemporalEvidenceClassifier
+
+        config = PipelineConfig(
+            sqlite_path=temp_db_path,
+            evidence_span_classifier_name="heuristic",
+            enable_temporal_reasoning=True,
+        )
+
+        classifier = EngineFactory._create_evidence_span_classifier(config)
+
+        assert isinstance(classifier, TemporalEvidenceClassifier)
+        assert isinstance(classifier.base_classifier, HeuristicEvidenceSpanClassifier)
 
     def test_factory_falls_back_to_heuristic_when_nli_model_fails_to_load(self, temp_db_path):
         from src.classification.evidence_span_classifier import HeuristicEvidenceSpanClassifier
@@ -249,6 +265,7 @@ class TestEvidenceSpanClassifierFactory:
             sqlite_path=temp_db_path,
             evidence_span_classifier_name="nli",
             evidence_span_classifier_model_name="this/model-does-not-exist-and-should-fail",
+            enable_temporal_reasoning=False,
         )
 
         with mock.patch(

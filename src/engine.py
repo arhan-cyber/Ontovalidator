@@ -2,10 +2,12 @@
 
 import sqlite3
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+from uuid import uuid4
 
 from .models import (
     Chunk,
+    ChunkType,
     RetrievalResult,
     OntologyAssertion,
     EvidenceSpan,
@@ -16,13 +18,26 @@ from .models import (
 )
 from .routing import QueryRouter, MoERouter
 from .retrieval import BaseRetriever, SQLiteGraphRetriever
+from .retrieval.explainer import RetrieverExplainer
+from .annotation.annotator import ChunkAnnotator
 from .fusion import FusionEngine, WeightedFusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import EvidenceValidator, MinimalValidator
+from .feedback.explainer import RejectionExplainer
 from .classification.evidence_judge import BaseEvidenceJudge, HeuristicEvidenceJudge
 from .classification.evidence_span_classifier import BaseEvidenceSpanClassifier, HeuristicEvidenceSpanClassifier
 
 logger = logging.getLogger(__name__)
+
+# Verdict scoring constants, named so the breakdown can report them.
+BASELINE_SCORE = 0.2
+SUPPORT_WEIGHT = 0.6
+PARTIAL_WEIGHT = 0.15
+REFUTE_WEIGHT = -0.55
+AGREEMENT_BONUS_PER_SOURCE = 0.08
+CONTRADICTED_REFUTE_THRESHOLD = 0.6
+SUPPORTED_SUPPORT_THRESHOLD = 0.7
+LABEL_SCORE_FLOORS = {"supported": 0.8, "contradicted": 0.75, "partial": 0.35}
 
 
 class SVOVerificationEngine:
@@ -43,6 +58,8 @@ class SVOVerificationEngine:
         svo_extractor: Optional[Any] = None,
         embedding_model: Optional[Any] = None,
         config: Optional[Any] = None,
+        cache_engine: Optional[Any] = None,
+        feedback_recorder: Optional[Any] = None,
     ):
         self.router = router
         self.lexical_store = lexical_store
@@ -57,6 +74,11 @@ class SVOVerificationEngine:
         self.svo_extractor = svo_extractor
         self.embedding_model = embedding_model
         self.config = config
+        self.cache_engine = cache_engine
+        self.feedback_recorder = feedback_recorder
+        self.retriever_explainer = RetrieverExplainer()
+        self.chunk_annotator = ChunkAnnotator()
+        self.rejection_explainer = RejectionExplainer()
 
         if config and config.verbose:
             logger.info(f"SVOVerificationEngine initialized with config: backend_mode={config.backend_mode.value}")
@@ -117,6 +139,15 @@ class SVOVerificationEngine:
                 counter_evidence=[],
                 retrieval_sources=retrieval_sources,
                 rule_hits=["no_evidence"],
+                scoring_breakdown={
+                    "baseline": BASELINE_SCORE,
+                    "raw_score": "no evidence retrieved",
+                    "final_score": 0.1,
+                    "adjustment_reason": "No evidence retrieved - fixed floor score of 0.1",
+                },
+                decision_thresholds={
+                    "chosen_label": "unknown (no evidence retrieved)",
+                },
             )
 
         supports = [e for e in evidence if e.support_type == "supports"]
@@ -127,19 +158,55 @@ class SVOVerificationEngine:
         support_strength = sum(e.confidence for e in supports)
         refute_strength = sum(e.confidence for e in refutes)
         partial_strength = sum(e.confidence for e in partials)
-        agreement_bonus = 0.08 * max(0, len(set(retrieval_sources)) - 1)
+        distinct_sources = len(set(retrieval_sources))
+        agreement_bonus = AGREEMENT_BONUS_PER_SOURCE * max(0, distinct_sources - 1)
 
-        raw_score = 0.2 + 0.6 * support_strength + 0.15 * partial_strength + agreement_bonus - 0.55 * refute_strength
+        support_component = SUPPORT_WEIGHT * support_strength
+        partial_component = PARTIAL_WEIGHT * partial_strength
+        refute_component = REFUTE_WEIGHT * refute_strength
+        raw_score = (
+            BASELINE_SCORE + support_component + partial_component + agreement_bonus + refute_component
+        )
         score = round(max(0.0, min(1.0, raw_score)), 4)
 
-        if refute_strength > support_strength and refute_strength >= 0.6:
+        scoring_breakdown: Dict[str, Any] = {
+            "baseline": BASELINE_SCORE,
+            "support_strength": round(support_strength, 4),
+            "support_component": f"{SUPPORT_WEIGHT} x {round(support_strength, 4)} = {round(support_component, 4)}",
+            "partial_strength": round(partial_strength, 4),
+            "partial_component": f"{PARTIAL_WEIGHT} x {round(partial_strength, 4)} = {round(partial_component, 4)}",
+            "refute_strength": round(refute_strength, 4),
+            "refute_component": f"{REFUTE_WEIGHT} x {round(refute_strength, 4)} = {round(refute_component, 4)}",
+            "agreement_bonus": round(agreement_bonus, 4),
+            "agreement_bonus_explanation": (
+                f"{AGREEMENT_BONUS_PER_SOURCE} x (distinct retrieval sources {distinct_sources} - 1)"
+            ),
+            "raw_score": (
+                f"{BASELINE_SCORE} + {round(support_component, 4)} + {round(partial_component, 4)} "
+                f"+ {round(agreement_bonus, 4)} + {round(refute_component, 4)} = {round(raw_score, 4)}"
+            ),
+            "raw_score_value": round(raw_score, 4),
+            "clipped_score": score,
+            "evidence_counts": {
+                "supports": len(supports),
+                "refutes": len(refutes),
+                "partial": len(partials),
+                "unknown": len(unknowns),
+            },
+        }
+
+        if refute_strength > support_strength and refute_strength >= CONTRADICTED_REFUTE_THRESHOLD:
             label = "contradicted"
-        elif support_strength >= 0.7 and refute_strength == 0:
+        elif support_strength >= SUPPORTED_SUPPORT_THRESHOLD and refute_strength == 0:
             label = "supported"
         elif support_strength > 0 or partial_strength > 0:
             label = "partial"
         else:
             label = "unknown"
+
+        decision_thresholds = self._explain_decision(
+            label, support_strength, refute_strength, partial_strength
+        )
 
         rule_hits = []
         if supports:
@@ -162,12 +229,11 @@ class SVOVerificationEngine:
         else:
             rationale = "The retrieved evidence is insufficient to determine whether the triple is correct."
 
-        if label == "supported":
-            score = max(score, 0.8)
-        elif label == "contradicted":
-            score = max(score, 0.75)
-        elif label == "partial":
-            score = max(score, 0.35)
+        floor = LABEL_SCORE_FLOORS.get(label)
+        if floor is not None and score < floor:
+            scoring_breakdown["adjustment_reason"] = f"Label is '{label}' -> boost to min {floor}"
+            score = floor
+        scoring_breakdown["final_score"] = score
 
         return TripleVerdict(
             assertion_id=assertion.assertion_id,
@@ -181,8 +247,66 @@ class SVOVerificationEngine:
             counter_evidence=refutes,
             retrieval_sources=sorted(set(retrieval_sources)),
             rule_hits=rule_hits,
+            scoring_breakdown=scoring_breakdown,
+            decision_thresholds=decision_thresholds,
         )
 
+    @staticmethod
+    def _explain_decision(
+        label: str,
+        support_strength: float,
+        refute_strength: float,
+        partial_strength: float,
+    ) -> Dict[str, str]:
+        """State, for each label the pipeline could have chosen, why it did or did not."""
+        support_strength = round(support_strength, 4)
+        refute_strength = round(refute_strength, 4)
+        partial_strength = round(partial_strength, 4)
+
+        contradicted_fired = (
+            refute_strength > support_strength and refute_strength >= CONTRADICTED_REFUTE_THRESHOLD
+        )
+        supported_fired = support_strength >= SUPPORTED_SUPPORT_THRESHOLD and refute_strength == 0
+
+        if contradicted_fired:
+            contradicted = (
+                f"triggered: refute_strength ({refute_strength}) > support_strength "
+                f"({support_strength}) and >= {CONTRADICTED_REFUTE_THRESHOLD}"
+            )
+        else:
+            contradicted = (
+                f"not triggered: refute_strength ({refute_strength}) is not both "
+                f"> support_strength ({support_strength}) and >= {CONTRADICTED_REFUTE_THRESHOLD}"
+            )
+
+        if supported_fired:
+            supported = (
+                f"triggered: support_strength ({support_strength}) >= "
+                f"{SUPPORTED_SUPPORT_THRESHOLD} and refute_strength == 0"
+            )
+        else:
+            supported = (
+                f"not triggered: support_strength ({support_strength}) < "
+                f"{SUPPORTED_SUPPORT_THRESHOLD} or refute_strength ({refute_strength}) > 0"
+            )
+
+        if support_strength > 0 or partial_strength > 0:
+            partial = (
+                f"eligible: support_strength ({support_strength}) or partial_strength "
+                f"({partial_strength}) is above zero"
+            )
+        else:
+            partial = "not eligible: no supporting or partial evidence"
+
+        return {
+            "contradicted_rule": contradicted,
+            "supported_rule": supported,
+            "partial_rule": partial,
+            "unknown_rule": (
+                "reached only when no supporting, refuting, or partial evidence survives adjudication"
+            ),
+            "chosen_label": f"{label} (first matching rule in priority order)",
+        }
 
     def _build_evidence_pack(
         self,
@@ -248,18 +372,38 @@ class SVOVerificationEngine:
             score = max(float(heuristic.score), float(judge.confidence))
         else:
             score = float(heuristic.score)
+        final_score = round(min(1.0, max(0.0, score)), 4)
+        breakdown = dict(heuristic.scoring_breakdown or {})
+        breakdown["lm_judge_label"] = judge.label
+        breakdown["lm_judge_confidence"] = round(float(judge.confidence), 4)
+        breakdown["final_score"] = final_score
+        if judge.label != heuristic.label:
+            breakdown["adjustment_reason"] = (
+                f"LM judge overrode heuristic label '{heuristic.label}' with '{judge.label}'"
+            )
+
+        thresholds = dict(heuristic.decision_thresholds or {})
+        thresholds["lm_judge_rule"] = (
+            f"LM judge returned '{judge.label}' at confidence {round(float(judge.confidence), 4)}"
+        )
+        thresholds["chosen_label"] = f"{judge.label} (LM judge)"
+
         return TripleVerdict(
             assertion_id=heuristic.assertion_id,
             subject=heuristic.subject,
             relation=heuristic.relation,
             object=heuristic.object,
             label=judge.label,
-            score=round(min(1.0, max(0.0, score)), 4),
+            score=final_score,
             rationale=f"Heuristic: {heuristic.rationale} LM: {judge.rationale}",
             evidence=heuristic.evidence,
             counter_evidence=heuristic.counter_evidence,
             retrieval_sources=heuristic.retrieval_sources,
             rule_hits=heuristic.rule_hits + ["lm_judge"] if judge else heuristic.rule_hits,
+            scoring_breakdown=breakdown,
+            decision_thresholds=thresholds,
+            rejected_evidence=heuristic.rejected_evidence,
+            feedback_id=heuristic.feedback_id,
         )
 
     def adjudicate_triple(
@@ -278,9 +422,10 @@ class SVOVerificationEngine:
                         es_client=None,
                         milvus_collection=None,
                         neo4j_driver=None,
-                        embedding_model=SimpleEmbeddingModel(),
-                        svo_extractor=MockSVOExtractor(),
+                        embedding_model=self.embedding_model or SimpleEmbeddingModel(),
+                        svo_extractor=self.svo_extractor or MockSVOExtractor(),
                         concept_extractor=MockConceptExtractor(),
+                        config=self.config,
                     )
                     temp_ingestor.ingest_document(doc_id, document_text)
             except Exception:
@@ -309,15 +454,21 @@ class SVOVerificationEngine:
         for res in ranked:
             res.chunk = chunk_map.get(res.chunk_id)
 
-        evidence: List[EvidenceSpan] = []
+        adjudicated: List[Tuple[RetrievalResult, EvidenceSpan]] = []
         retrieval_sources: List[str] = []
         for res in ranked:
             if not res.chunk:
                 continue
             retrieval_sources.extend(res.contributing_sources or [res.source])
-            evidence.append(self._chunk_evidence_for_assertion(assertion, res.chunk, res.source, res.score))
+            span = self._chunk_evidence_for_assertion(assertion, res.chunk, res.source, res.score)
+            self._attach_observability(query, assertion, res, span)
+            adjudicated.append((res, span))
+
+        used, rejected = self._split_used_and_rejected(adjudicated)
+        evidence = [span for _, span in used]
 
         heuristic_verdict = self._aggregate_triple_verdict(assertion, evidence, retrieval_sources)
+        heuristic_verdict.rejected_evidence = self._describe_rejected(rejected, evidence)
         evidence_pack = self._build_evidence_pack(assertion, evidence, ranked)
 
         judge_verdict = None
@@ -330,7 +481,70 @@ class SVOVerificationEngine:
         final_verdict = self._merge_verdicts(heuristic_verdict, judge_verdict)
         if judge_verdict is not None:
             final_verdict.rule_hits = sorted(set(final_verdict.rule_hits + ["heuristic_baseline", "evidence_judge"]))
+        final_verdict.feedback_id = uuid4().hex
         return final_verdict
+
+    def _attach_observability(
+        self,
+        query: str,
+        assertion: OntologyAssertion,
+        result: RetrievalResult,
+        span: EvidenceSpan,
+    ) -> None:
+        """Populate the retrieval-pathway and annotation payloads on an evidence span."""
+        if self._feature_enabled("enable_retrieval_pathway"):
+            span.retrieval_pathway = self.retriever_explainer.build_pathway(
+                query, result, span.text
+            )
+
+        if self._feature_enabled("enable_chunk_annotation"):
+            try:
+                annotation = self.chunk_annotator.annotate(span.text, assertion, span)
+            except Exception as e:
+                logger.warning(f"Chunk annotation failed for {span.chunk_id}: {e}")
+                return
+            span.annotated_html = annotation["annotated_html"]
+            span.negation_analysis = annotation["negation_analysis"]
+            span.component_matches = annotation["component_matches"]
+
+    def _feature_enabled(self, flag: str) -> bool:
+        return bool(getattr(self.config, flag, True)) if self.config else True
+
+    @staticmethod
+    def _split_used_and_rejected(
+        adjudicated: List[Tuple[RetrievalResult, EvidenceSpan]],
+    ) -> Tuple[List[Tuple[RetrievalResult, EvidenceSpan]], List[Tuple[RetrievalResult, EvidenceSpan]]]:
+        """Keep evidence that took a stance; set aside the rest as rejected.
+
+        Chunks classified "unknown" contribute nothing to the score, so holding
+        them back keeps them out of the judge's prompt while still reporting
+        them to the caller. If nothing took a stance, every chunk is kept so
+        the verdict is still explained by what was actually retrieved.
+        """
+        informative = [pair for pair in adjudicated if pair[1].support_type != "unknown"]
+        if not informative:
+            return adjudicated, []
+        rejected = [pair for pair in adjudicated if pair[1].support_type == "unknown"]
+        return informative, rejected
+
+    def _describe_rejected(
+        self,
+        rejected: List[Tuple[RetrievalResult, EvidenceSpan]],
+        used_evidence: List[EvidenceSpan],
+    ) -> List[Dict[str, Any]]:
+        if not rejected or not self._feature_enabled("enable_rejected_evidence"):
+            return []
+        return [
+            {
+                "chunk_id": span.chunk_id,
+                "text": span.text,
+                "retrieval_score": round(float(result.score), 4),
+                "adjudication": span.support_type,
+                "confidence": round(float(span.confidence), 4),
+                "reason_rejected": self.rejection_explainer.explain(span, used_evidence),
+            }
+            for result, span in rejected
+        ]
 
     def export_triple_adjudication(
         self,
@@ -475,42 +689,27 @@ class SVOVerificationEngine:
 
         ingestion_result = ingestor.ingest_document(document_id, raw_text)
 
-        # Step 2: Validate each triple
+        # Step 2: Validate each triple, reusing any still-valid cached verdict.
+        # The cache key includes a digest of raw_text, so re-posting a changed
+        # document under the same id re-runs the pipeline instead of replaying
+        # the previous answer.
+        document_fingerprint = self._document_fingerprint(raw_text)
         verdicts = []
+        cache_hits = 0
         for triple in triples:
+            cached = self._cached_verdict(triple.assertion_id, document_id, document_fingerprint)
+            if cached is not None:
+                cache_hits += 1
+                verdicts.append(cached)
+                continue
+
             verdict = self.adjudicate_triple(
                 document_text=None,  # Already ingested
                 assertion=triple,
                 top_k=top_k
             )
-
-            # Convert to JSON-serializable format
-            verdict_dict = {
-                "assertion_id": verdict.assertion_id,
-                "subject": verdict.subject,
-                "relation": verdict.relation,
-                "object": verdict.object,
-                "label": verdict.label,
-                "score": float(verdict.score),
-                "rationale": verdict.rationale,
-                "evidence": [
-                    {
-                        "chunk_id": span.chunk_id,
-                        "text": span.text,
-                        "source": span.source,
-                        "confidence": float(span.confidence),
-                        "match_type": span.support_type,
-                        "matched": {
-                            "subject": span.matched_subject,
-                            "relation": span.matched_relation,
-                            "object": span.matched_object,
-                        }
-                    }
-                    for span in verdict.evidence
-                ],
-                "rule_hits": verdict.rule_hits,
-                "retrieval_sources": sorted(set(verdict.retrieval_sources)),
-            }
+            verdict_dict = self._serialize_verdict(verdict)
+            self._store_verdict(verdict, verdict_dict, document_id, document_fingerprint)
             verdicts.append(verdict_dict)
 
         # Step 3: Compute summary statistics
@@ -521,6 +720,7 @@ class SVOVerificationEngine:
             "partial": sum(1 for v in verdicts if v["label"] == "partial"),
             "unknown": sum(1 for v in verdicts if v["label"] == "unknown"),
             "avg_score": sum(v["score"] for v in verdicts) / len(verdicts) if verdicts else 0.0,
+            "cache_hits": cache_hits,
         }
 
         return {
@@ -528,7 +728,108 @@ class SVOVerificationEngine:
             "ingestion_status": ingestion_result["status"],
             "chunks_ingested": ingestion_result.get("chunks", 0),
             "svos_extracted": ingestion_result.get("svos", 0),
+            "chunk_types": ingestion_result.get("chunk_types", {}),
             "verdicts": verdicts,
             "summary": summary,
             "backend_status": self.get_backend_status(),
         }
+
+    @staticmethod
+    def _document_fingerprint(raw_text: str) -> str:
+        from .cache.cache_engine import CacheEngine
+        return CacheEngine.fingerprint(raw_text)
+
+    def _cached_verdict(
+        self,
+        assertion_id: str,
+        document_id: str,
+        document_fingerprint: str,
+    ) -> Optional[Dict[str, Any]]:
+        if self.cache_engine is None:
+            return None
+        return self.cache_engine.get_verdict(assertion_id, document_id, document_fingerprint)
+
+    def _store_verdict(
+        self,
+        verdict: TripleVerdict,
+        verdict_dict: Dict[str, Any],
+        document_id: str,
+        document_fingerprint: str,
+    ) -> None:
+        if self.cache_engine is None:
+            return
+        ttl_days = getattr(self.config, "verdict_cache_ttl_days", 14) if self.config else 14
+        self.cache_engine.set_verdict(
+            verdict.assertion_id,
+            document_id,
+            verdict_dict,
+            document_fingerprint,
+            ttl_seconds=ttl_days * 86400,
+        )
+        if verdict.feedback_id:
+            # Lets POST /feedback/correct resolve a correction back to the
+            # original verdict without the client resending it.
+            self.cache_engine.set(
+                "feedback_verdict",
+                {"verdict": verdict_dict, "document_id": document_id},
+                verdict.feedback_id,
+                ttl_seconds=ttl_days * 86400,
+            )
+
+    def _serialize_verdict(self, verdict: TripleVerdict) -> Dict[str, Any]:
+        """JSON-serializable form of a verdict, including the transparency payloads."""
+        return {
+            "assertion_id": verdict.assertion_id,
+            "subject": verdict.subject,
+            "relation": verdict.relation,
+            "object": verdict.object,
+            "label": verdict.label,
+            "score": float(verdict.score),
+            "rationale": verdict.rationale,
+            "evidence": [self._serialize_evidence(span) for span in verdict.evidence],
+            "rule_hits": verdict.rule_hits,
+            "retrieval_sources": sorted(set(verdict.retrieval_sources)),
+            "scoring_breakdown": verdict.scoring_breakdown,
+            "decision_thresholds": verdict.decision_thresholds,
+            "rejected_evidence": verdict.rejected_evidence,
+            "feedback_id": verdict.feedback_id,
+        }
+
+    @staticmethod
+    def _serialize_evidence(span: EvidenceSpan) -> Dict[str, Any]:
+        return {
+            "chunk_id": span.chunk_id,
+            "text": span.text,
+            "source": span.source,
+            "confidence": float(span.confidence),
+            "match_type": span.support_type,
+            "matched": {
+                "subject": span.matched_subject,
+                "relation": span.matched_relation,
+                "object": span.matched_object,
+            },
+            "retrieval_pathway": span.retrieval_pathway,
+            "annotated_html": span.annotated_html,
+            "negation_analysis": span.negation_analysis,
+            "component_matches": span.component_matches,
+            "temporal_status": span.temporal_status,
+            "chunk_timestamp": span.chunk_timestamp.isoformat() if span.chunk_timestamp else None,
+        }
+
+    def record_feedback(
+        self,
+        verdict: TripleVerdict,
+        actual_label: str,
+        document_id: str,
+        actual_reason: Optional[str] = None,
+    ) -> bool:
+        """Record a user correction. Returns False when no recorder is configured."""
+        if self.feedback_recorder is None:
+            return False
+        self.feedback_recorder.record_correction(
+            verdict=verdict,
+            actual_label=actual_label,
+            document_id=document_id,
+            actual_reason=actual_reason,
+        )
+        return True

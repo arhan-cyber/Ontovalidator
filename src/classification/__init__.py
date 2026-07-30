@@ -14,6 +14,7 @@ from .evidence_span_classifier import (
     HeuristicEvidenceSpanClassifier,
     NLIEvidenceSpanClassifier,
 )
+from .temporal_evidence_classifier import TemporalEvidenceClassifier
 from .dataset import (
     TripleClassificationExample,
     TripleDatasetWriter,
@@ -34,6 +35,7 @@ __all__ = [
     "BaseEvidenceSpanClassifier",
     "HeuristicEvidenceSpanClassifier",
     "NLIEvidenceSpanClassifier",
+    "TemporalEvidenceClassifier",
     "TripleClassificationExample",
     "TripleDatasetWriter",
     "TripleClassificationResult",

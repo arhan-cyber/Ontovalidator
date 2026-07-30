@@ -89,9 +89,54 @@ class PipelineConfig:
     enable_lm_classifier: bool = False
     classifier_model_name: Optional[str] = None
 
+    # Caching
+    enable_cache: bool = True
+    cache_db_path: str = "cache.db"
+    embedding_cache_ttl_days: int = 30
+    retrieval_cache_ttl_days: int = 7
+    verdict_cache_ttl_days: int = 14
+    cache_clear_interval_hours: int = 24
+
+    # Multi-modal ingestion
+    enable_table_extraction: bool = True
+    enable_list_extraction: bool = True
+    enable_ocr: bool = False  # Requires pytesseract
+    table_extraction_mode: str = "html"  # "html", "csv", "auto"
+    min_ocr_confidence: float = 0.5
+
+    # Temporal reasoning
+    enable_temporal_reasoning: bool = True
+    outdated_evidence_confidence_penalty: float = 0.6
+    future_evidence_confidence_penalty: float = 0.3
+    default_temporal_scope_years: int = 5
+
+    # Feedback loop
+    enable_feedback: bool = True
+    feedback_db_path: str = "feedback.db"
+
+    # Observability payloads on verdicts
+    enable_retrieval_pathway: bool = True
+    enable_chunk_annotation: bool = True
+    enable_scoring_breakdown: bool = True
+    enable_rejected_evidence: bool = True
+
     # Logging and diagnostics
     verbose: bool = False
     log_backend_usage: bool = False
+
+    def __post_init__(self) -> None:
+        self._resolve_derived_db_paths()
+
+    def _resolve_derived_db_paths(self) -> None:
+        """Keep the derived databases next to the chunk store they describe.
+
+        Without this a config pointed at /tmp/run/svo.db would still drop
+        cache.db and feedback.db into the current working directory.
+        """
+        directory = os.path.dirname(os.path.abspath(self.sqlite_path))
+        for field_name, default in (("cache_db_path", "cache.db"), ("feedback_db_path", "feedback.db")):
+            if getattr(self, field_name) == default:
+                setattr(self, field_name, os.path.join(directory, default))
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary."""
@@ -114,6 +159,27 @@ class PipelineConfig:
             "judge_model_name": self.judge_model_name,
             "enable_lm_classifier": self.enable_lm_classifier,
             "classifier_model_name": self.classifier_model_name,
+            "enable_cache": self.enable_cache,
+            "cache_db_path": self.cache_db_path,
+            "embedding_cache_ttl_days": self.embedding_cache_ttl_days,
+            "retrieval_cache_ttl_days": self.retrieval_cache_ttl_days,
+            "verdict_cache_ttl_days": self.verdict_cache_ttl_days,
+            "cache_clear_interval_hours": self.cache_clear_interval_hours,
+            "enable_table_extraction": self.enable_table_extraction,
+            "enable_list_extraction": self.enable_list_extraction,
+            "enable_ocr": self.enable_ocr,
+            "table_extraction_mode": self.table_extraction_mode,
+            "min_ocr_confidence": self.min_ocr_confidence,
+            "enable_temporal_reasoning": self.enable_temporal_reasoning,
+            "outdated_evidence_confidence_penalty": self.outdated_evidence_confidence_penalty,
+            "future_evidence_confidence_penalty": self.future_evidence_confidence_penalty,
+            "default_temporal_scope_years": self.default_temporal_scope_years,
+            "enable_feedback": self.enable_feedback,
+            "feedback_db_path": self.feedback_db_path,
+            "enable_retrieval_pathway": self.enable_retrieval_pathway,
+            "enable_chunk_annotation": self.enable_chunk_annotation,
+            "enable_scoring_breakdown": self.enable_scoring_breakdown,
+            "enable_rejected_evidence": self.enable_rejected_evidence,
             "verbose": self.verbose,
             "log_backend_usage": self.log_backend_usage,
         }
@@ -207,9 +273,44 @@ class PipelineConfig:
         config.enable_lm_classifier = os.getenv("ONTO_ENABLE_LM_CLASSIFIER", "false").lower() == "true"
         config.classifier_model_name = os.getenv("ONTO_CLASSIFIER_MODEL", None)
 
+        # Caching
+        config.enable_cache = os.getenv("ONTO_ENABLE_CACHE", "true").lower() == "true"
+        config.cache_db_path = os.getenv("ONTO_CACHE_DB_PATH", "cache.db")
+        config.embedding_cache_ttl_days = int(os.getenv("ONTO_EMBEDDING_CACHE_TTL_DAYS", "30"))
+        config.retrieval_cache_ttl_days = int(os.getenv("ONTO_RETRIEVAL_CACHE_TTL_DAYS", "7"))
+        config.verdict_cache_ttl_days = int(os.getenv("ONTO_VERDICT_CACHE_TTL_DAYS", "14"))
+        config.cache_clear_interval_hours = int(os.getenv("ONTO_CACHE_CLEAR_INTERVAL_HOURS", "24"))
+
+        # Multi-modal ingestion
+        config.enable_table_extraction = os.getenv("ONTO_ENABLE_TABLE_EXTRACTION", "true").lower() == "true"
+        config.enable_list_extraction = os.getenv("ONTO_ENABLE_LIST_EXTRACTION", "true").lower() == "true"
+        config.enable_ocr = os.getenv("ONTO_ENABLE_OCR", "false").lower() == "true"
+        config.table_extraction_mode = os.getenv("ONTO_TABLE_EXTRACTION_MODE", "html")
+        config.min_ocr_confidence = float(os.getenv("ONTO_MIN_OCR_CONFIDENCE", "0.5"))
+
+        # Temporal reasoning
+        config.enable_temporal_reasoning = os.getenv("ONTO_ENABLE_TEMPORAL_REASONING", "true").lower() == "true"
+        config.outdated_evidence_confidence_penalty = float(os.getenv("ONTO_OUTDATED_EVIDENCE_PENALTY", "0.6"))
+        config.future_evidence_confidence_penalty = float(os.getenv("ONTO_FUTURE_EVIDENCE_PENALTY", "0.3"))
+        config.default_temporal_scope_years = int(os.getenv("ONTO_DEFAULT_TEMPORAL_SCOPE_YEARS", "5"))
+
+        # Feedback loop
+        config.enable_feedback = os.getenv("ONTO_ENABLE_FEEDBACK", "true").lower() == "true"
+        config.feedback_db_path = os.getenv("ONTO_FEEDBACK_DB_PATH", "feedback.db")
+
+        # Observability payloads
+        config.enable_retrieval_pathway = os.getenv("ONTO_ENABLE_RETRIEVAL_PATHWAY", "true").lower() == "true"
+        config.enable_chunk_annotation = os.getenv("ONTO_ENABLE_CHUNK_ANNOTATION", "true").lower() == "true"
+        config.enable_scoring_breakdown = os.getenv("ONTO_ENABLE_SCORING_BREAKDOWN", "true").lower() == "true"
+        config.enable_rejected_evidence = os.getenv("ONTO_ENABLE_REJECTED_EVIDENCE", "true").lower() == "true"
+
         # Logging
         config.verbose = os.getenv("ONTO_VERBOSE", "false").lower() == "true"
         config.log_backend_usage = os.getenv("ONTO_LOG_BACKEND_USAGE", "false").lower() == "true"
+
+        # sqlite_path was assigned after __post_init__ ran, so re-anchor the
+        # derived paths against the final value.
+        config._resolve_derived_db_paths()
 
         return config
 
