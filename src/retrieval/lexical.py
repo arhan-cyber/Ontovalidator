@@ -2,20 +2,21 @@
 
 import re
 import sqlite3
-from typing import List
+from typing import Any, List, Optional
 
-from .base import BaseRetriever
+from .base import BaseRetriever, SQLiteCorpusMixin
 from ..models import RetrievalResult
 
 
 class LexicalRetriever(BaseRetriever):
     """Production lexical retriever using Elasticsearch BM25."""
 
-    def __init__(self, es_client, index_name: str = "svo_chunks"):
+    def __init__(self, es_client, index_name: str = "svo_chunks", cache_engine: Optional[Any] = None):
+        super().__init__(cache_engine=cache_engine)
         self.es_client = es_client
         self.index_name = index_name
 
-    def retrieve(self, query: str, top_k: int) -> List[RetrievalResult]:
+    def _retrieve_impl(self, query: str, top_k: int, **kwargs) -> List[RetrievalResult]:
         es_query = {
             "query": {
                 "match": {
@@ -44,13 +45,14 @@ class LexicalRetriever(BaseRetriever):
         return results
 
 
-class SQLiteLexicalRetriever(BaseRetriever):
+class SQLiteLexicalRetriever(SQLiteCorpusMixin, BaseRetriever):
     """Lightweight lexical retriever using SQLite (CPU-only, no external deps)."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, cache_engine: Optional[Any] = None):
+        super().__init__(cache_engine=cache_engine)
         self.db_path = db_path
 
-    def retrieve(self, query: str, top_k: int) -> List[RetrievalResult]:
+    def _retrieve_impl(self, query: str, top_k: int, **kwargs) -> List[RetrievalResult]:
         query_tokens = set(re.findall(r"\w+", query.lower()))
         if not query_tokens:
             return []

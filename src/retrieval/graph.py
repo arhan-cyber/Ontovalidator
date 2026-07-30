@@ -5,17 +5,18 @@ import sqlite3
 import json
 from typing import List, Dict, Any, Optional
 
-from .base import BaseRetriever
+from .base import BaseRetriever, SQLiteCorpusMixin
 from ..models import RetrievalResult
 
 
 class GraphRetriever(BaseRetriever):
     """Production graph retriever using Neo4j multi-hop traversal."""
 
-    def __init__(self, neo4j_driver):
+    def __init__(self, neo4j_driver, cache_engine: Optional[Any] = None):
+        super().__init__(cache_engine=cache_engine)
         self.driver = neo4j_driver
 
-    def retrieve(self, query: str, top_k: int, max_hops: int = 3) -> List[RetrievalResult]:
+    def _retrieve_impl(self, query: str, top_k: int, max_hops: int = 3, **kwargs) -> List[RetrievalResult]:
         results = []
 
         cypher_query = f"""
@@ -49,13 +50,14 @@ class GraphRetriever(BaseRetriever):
         return results
 
 
-class SQLiteGraphRetriever(BaseRetriever):
+class SQLiteGraphRetriever(SQLiteCorpusMixin, BaseRetriever):
     """Lightweight graph retriever using SQLite in-memory concept graph."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, cache_engine: Optional[Any] = None):
+        super().__init__(cache_engine=cache_engine)
         self.db_path = db_path
 
-    def retrieve(self, query: str, top_k: int, max_hops: int = 3) -> List[RetrievalResult]:
+    def _retrieve_impl(self, query: str, top_k: int, max_hops: int = 3, **kwargs) -> List[RetrievalResult]:
         query_tokens = set(re.findall(r"\w+", query.lower()))
         if not query_tokens:
             return []

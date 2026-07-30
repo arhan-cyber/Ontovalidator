@@ -2,24 +2,31 @@
 
 import re
 import sqlite3
-from typing import List, Dict, Any, Optional
+from typing import Any, List, Optional
 
-from .base import BaseRetriever
+from .base import BaseRetriever, SQLiteCorpusMixin
 from ..models import RetrievalResult
 
 
 class MilvusSemanticRetriever(BaseRetriever):
     """Production semantic retriever using Milvus ANN search."""
 
-    def __init__(self, collection_name: str, embedding_model, search_params: dict = None):
+    def __init__(
+        self,
+        collection_name: str,
+        embedding_model,
+        search_params: dict = None,
+        cache_engine: Optional[Any] = None,
+    ):
         from pymilvus import Collection
 
+        super().__init__(cache_engine=cache_engine)
         self.collection = Collection(collection_name)
         self.collection.load()
         self.embedding_model = embedding_model
         self.search_params = search_params or {"metric_type": "COSINE", "params": {"nprobe": 10}}
 
-    def retrieve(self, query: str, top_k: int) -> List[RetrievalResult]:
+    def _retrieve_impl(self, query: str, top_k: int, **kwargs) -> List[RetrievalResult]:
         results = []
         try:
             query_vector = self.embedding_model.encode(query)
@@ -47,13 +54,14 @@ class MilvusSemanticRetriever(BaseRetriever):
         return results
 
 
-class SQLiteSemanticRetriever(BaseRetriever):
+class SQLiteSemanticRetriever(SQLiteCorpusMixin, BaseRetriever):
     """Lightweight semantic retriever using Jaccard similarity on SQLite."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, cache_engine: Optional[Any] = None):
+        super().__init__(cache_engine=cache_engine)
         self.db_path = db_path
 
-    def retrieve(self, query: str, top_k: int) -> List[RetrievalResult]:
+    def _retrieve_impl(self, query: str, top_k: int, **kwargs) -> List[RetrievalResult]:
         query_tokens = set(re.findall(r"\w+", query.lower()))
         if not query_tokens:
             return []

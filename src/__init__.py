@@ -2,6 +2,8 @@
 
 from .models import (
     Chunk,
+    ChunkType,
+    TemporalScope,
     SVORelation,
     RetrievalResult,
     OntologyAssertion,
@@ -22,7 +24,11 @@ from .retrieval import (
     SQLiteSemanticRetriever,
     GraphRetriever,
     SQLiteGraphRetriever,
+    RetrieverExplainer,
 )
+from .annotation import ChunkAnnotator
+from .cache import CacheEngine
+from .feedback import FeedbackRecorder, FeedbackDashboard, RejectionExplainer
 from .fusion import FusionEngine, WeightedFusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
 from .validation import (
@@ -31,7 +37,16 @@ from .validation import (
     TransformerValidator,
     OntologyViolationValidator,
 )
-from .ingestion import DataIngestor, MockSVOExtractor, MockConceptExtractor, SimpleEmbeddingModel
+from .ingestion import (
+    DataIngestor,
+    MockSVOExtractor,
+    MockConceptExtractor,
+    SimpleEmbeddingModel,
+    TableExtractor,
+    ListExtractor,
+    ImageExtractor,
+    TemporalExtractor,
+)
 from .classification import (
     BaseTripleClassifier,
     HeuristicTripleClassifier,
@@ -39,6 +54,7 @@ from .classification import (
     BaseEvidenceJudge,
     HeuristicEvidenceJudge,
     PromptEvidenceJudge,
+    TemporalEvidenceClassifier,
     TripleDatasetWriter,
     TripleClassificationExample,
 )
@@ -46,6 +62,8 @@ from .engine import SVOVerificationEngine
 
 __all__ = [
     "Chunk",
+    "ChunkType",
+    "TemporalScope",
     "SVORelation",
     "RetrievalResult",
     "OntologyAssertion",
@@ -65,6 +83,12 @@ __all__ = [
     "SQLiteSemanticRetriever",
     "GraphRetriever",
     "SQLiteGraphRetriever",
+    "RetrieverExplainer",
+    "ChunkAnnotator",
+    "CacheEngine",
+    "FeedbackRecorder",
+    "FeedbackDashboard",
+    "RejectionExplainer",
     "FusionEngine",
     "WeightedFusionEngine",
     "ChunkStore",
@@ -77,6 +101,11 @@ __all__ = [
     "MockSVOExtractor",
     "MockConceptExtractor",
     "SimpleEmbeddingModel",
+    "TableExtractor",
+    "ListExtractor",
+    "ImageExtractor",
+    "TemporalExtractor",
+    "TemporalEvidenceClassifier",
     "BaseTripleClassifier",
     "HeuristicTripleClassifier",
     "PromptTripleClassifier",

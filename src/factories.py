@@ -47,10 +47,13 @@ class EngineFactory:
         # Create router
         router = MoERouter()
 
+        # Shared cache, injected into every component that can read through it
+        cache_engine = EngineFactory._create_cache_engine(config)
+
         # Create retrievers
-        lexical_store = EngineFactory._create_lexical_retriever(config)
-        semantic_store = EngineFactory._create_semantic_retriever(config)
-        graph_store = EngineFactory._create_graph_retriever(config)
+        lexical_store = EngineFactory._create_lexical_retriever(config, cache_engine)
+        semantic_store = EngineFactory._create_semantic_retriever(config, cache_engine)
+        graph_store = EngineFactory._create_graph_retriever(config, cache_engine)
 
         # Create other components
         fusion_engine = WeightedFusionEngine()
@@ -61,12 +64,15 @@ class EngineFactory:
 
         # Create embedding model and SVO extractor so validate_triples_batch's internal
         # ingestion step actually uses the configured models instead of silently falling
-        # back to SimpleEmbeddingModel/MockSVOExtractor (see engine.py:464-476).
-        embedding_model = EngineFactory._create_embedding_model(config)
+        # back to SimpleEmbeddingModel/MockSVOExtractor.
+        embedding_model = EngineFactory._create_embedding_model(config, cache_engine)
         svo_extractor = EngineFactory._create_svo_extractor(config)
 
         # Create evidence-span classifier
         evidence_span_classifier = EngineFactory._create_evidence_span_classifier(config)
+
+        # Create feedback recorder
+        feedback_recorder = EngineFactory._create_feedback_recorder(config)
 
         # Create evidence judge
         evidence_judge = HeuristicEvidenceJudge()
@@ -110,6 +116,8 @@ class EngineFactory:
             svo_extractor=svo_extractor,
             embedding_model=embedding_model,
             config=config,
+            cache_engine=cache_engine,
+            feedback_recorder=feedback_recorder,
         )
 
         if config.verbose:
@@ -119,7 +127,39 @@ class EngineFactory:
         return engine
 
     @staticmethod
-    def _create_lexical_retriever(config: PipelineConfig) -> BaseRetriever:
+    def _create_cache_engine(config: PipelineConfig) -> Optional[Any]:
+        """Create the shared cache, or None when caching is disabled."""
+        if not getattr(config, "enable_cache", False):
+            return None
+        try:
+            from .cache import CacheEngine
+            cache = CacheEngine(config.cache_db_path)
+            if config.verbose:
+                logger.info(f"Cache enabled at {config.cache_db_path}")
+            return cache
+        except Exception as e:
+            logger.warning(f"Failed to create CacheEngine: {e}. Running without cache.")
+            return None
+
+    @staticmethod
+    def _create_feedback_recorder(config: PipelineConfig) -> Optional[Any]:
+        """Create the feedback recorder, or None when feedback is disabled."""
+        if not getattr(config, "enable_feedback", False):
+            return None
+        try:
+            from .feedback import FeedbackRecorder
+            recorder = FeedbackRecorder(config.feedback_db_path)
+            if config.verbose:
+                logger.info(f"Feedback recording enabled at {config.feedback_db_path}")
+            return recorder
+        except Exception as e:
+            logger.warning(f"Failed to create FeedbackRecorder: {e}. Corrections will not be recorded.")
+            return None
+
+    @staticmethod
+    def _create_lexical_retriever(
+        config: PipelineConfig, cache_engine: Optional[Any] = None
+    ) -> BaseRetriever:
         """Create lexical retriever based on config."""
         if config.elasticsearch.enabled:
             try:
@@ -132,36 +172,42 @@ class EngineFactory:
                 return LexicalRetriever(
                     es_client=es_client,
                     index_name=config.elasticsearch.index_name,
+                    cache_engine=cache_engine,
                 )
             except Exception as e:
                 logger.warning(f"Failed to create Elasticsearch retriever: {e}. Falling back to SQLite.")
 
         if config.verbose:
             logger.info("Using SQLite for lexical retrieval")
-        return SQLiteLexicalRetriever(config.sqlite_path)
+        return SQLiteLexicalRetriever(config.sqlite_path, cache_engine=cache_engine)
 
     @staticmethod
-    def _create_semantic_retriever(config: PipelineConfig) -> BaseRetriever:
+    def _create_semantic_retriever(
+        config: PipelineConfig, cache_engine: Optional[Any] = None
+    ) -> BaseRetriever:
         """Create semantic retriever based on config."""
         if config.milvus.enabled:
             try:
                 from .retrieval.semantic import MilvusSemanticRetriever
-                embedding_model = EngineFactory._create_embedding_model(config)
+                embedding_model = EngineFactory._create_embedding_model(config, cache_engine)
                 if config.verbose:
                     logger.info(f"Using Milvus for semantic retrieval at {config.milvus.host}:{config.milvus.port}")
                 return MilvusSemanticRetriever(
                     collection_name=config.milvus.collection_name,
                     embedding_model=embedding_model,
+                    cache_engine=cache_engine,
                 )
             except Exception as e:
                 logger.warning(f"Failed to create Milvus retriever: {e}. Falling back to SQLite.")
 
         if config.verbose:
             logger.info("Using SQLite for semantic retrieval")
-        return SQLiteSemanticRetriever(config.sqlite_path)
+        return SQLiteSemanticRetriever(config.sqlite_path, cache_engine=cache_engine)
 
     @staticmethod
-    def _create_graph_retriever(config: PipelineConfig) -> BaseRetriever:
+    def _create_graph_retriever(
+        config: PipelineConfig, cache_engine: Optional[Any] = None
+    ) -> BaseRetriever:
         """Create graph retriever based on config."""
         if config.neo4j.enabled:
             try:
@@ -174,13 +220,13 @@ class EngineFactory:
                 )
                 if config.verbose:
                     logger.info(f"Using Neo4j for graph retrieval at {config.neo4j.uri}")
-                return GraphRetriever(driver)
+                return GraphRetriever(driver, cache_engine=cache_engine)
             except Exception as e:
                 logger.warning(f"Failed to create Neo4j retriever: {e}. Falling back to SQLite.")
 
         if config.verbose:
             logger.info("Using SQLite for graph retrieval")
-        return SQLiteGraphRetriever(config.sqlite_path)
+        return SQLiteGraphRetriever(config.sqlite_path, cache_engine=cache_engine)
 
     @staticmethod
     def _create_validator(config: PipelineConfig) -> EvidenceValidator:
@@ -201,6 +247,22 @@ class EngineFactory:
     @staticmethod
     def _create_evidence_span_classifier(config: PipelineConfig) -> BaseEvidenceSpanClassifier:
         """Create per-chunk evidence-span classifier based on config."""
+        base = EngineFactory._create_base_span_classifier(config)
+
+        if getattr(config, "enable_temporal_reasoning", False):
+            from .classification.temporal_evidence_classifier import TemporalEvidenceClassifier
+            if config.verbose:
+                logger.info(f"Wrapping {type(base).__name__} in TemporalEvidenceClassifier")
+            return TemporalEvidenceClassifier(
+                base_classifier=base,
+                outdated_penalty=config.outdated_evidence_confidence_penalty,
+                future_penalty=config.future_evidence_confidence_penalty,
+            )
+        return base
+
+    @staticmethod
+    def _create_base_span_classifier(config: PipelineConfig) -> BaseEvidenceSpanClassifier:
+        """The stance classifier itself, before any temporal decoration."""
         if config.evidence_span_classifier_name == "nli":
             try:
                 from .classification.evidence_span_classifier import NLIEvidenceSpanClassifier
@@ -220,19 +282,19 @@ class EngineFactory:
         return HeuristicEvidenceSpanClassifier()
 
     @staticmethod
-    def _create_embedding_model(config: PipelineConfig) -> Any:
+    def _create_embedding_model(config: PipelineConfig, cache_engine: Optional[Any] = None) -> Any:
         """Create embedding model based on config."""
         if config.embedding_model_name == "transformer":
             try:
                 from .ingestion.embeddings import TransformerEmbeddingModel
                 logger.info("Using TransformerEmbeddingModel")
-                return TransformerEmbeddingModel()
+                return TransformerEmbeddingModel(cache_engine=cache_engine)
             except Exception as e:
                 logger.warning(f"Failed to create TransformerEmbeddingModel: {e}. Falling back to SimpleEmbeddingModel.")
 
         logger.info("Using SimpleEmbeddingModel")
         from .ingestion.embeddings import SimpleEmbeddingModel
-        return SimpleEmbeddingModel()
+        return SimpleEmbeddingModel(cache_engine=cache_engine)
 
     @staticmethod
     def _create_svo_extractor(config: PipelineConfig) -> Any:
@@ -314,7 +376,8 @@ class EngineFactory:
         # DataIngestor should handle None gracefully
 
         # Create models
-        embedding_model = EngineFactory._create_embedding_model(config)
+        cache_engine = EngineFactory._create_cache_engine(config)
+        embedding_model = EngineFactory._create_embedding_model(config, cache_engine)
         svo_extractor = EngineFactory._create_svo_extractor(config)
 
         if config.concept_extractor_name == "transformer":

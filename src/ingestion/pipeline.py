@@ -6,9 +6,14 @@ import re
 import sqlite3
 from typing import List, Dict, Any, Optional
 
-from ..models import Chunk, SVORelation
+from ..models import Chunk, ChunkType, SVORelation
+from ..storage.chunk_store import ensure_chunks_schema
 from .extractors import MockSVOExtractor, MockConceptExtractor
 from .embeddings import SimpleEmbeddingModel
+from .list_extractor import ListExtractor
+from .table_extractor import TableExtractor
+from .image_extractor import ImageExtractor
+from .temporal_extractor import TemporalExtractor
 
 
 class LocalElasticsearchClient:
@@ -63,7 +68,11 @@ class DataIngestor:
         embedding_model,
         svo_extractor,
         concept_extractor=None,
-        config=None
+        config=None,
+        table_extractor=None,
+        list_extractor=None,
+        image_extractor=None,
+        temporal_extractor=None,
     ):
         self.sqlite_path = sqlite_conn_path
         self.es_client = es_client
@@ -78,8 +87,18 @@ class DataIngestor:
         else:
             self.concept_extractor = concept_extractor
 
+        self.table_extractor = table_extractor or TableExtractor()
+        self.list_extractor = list_extractor or ListExtractor()
+        self.image_extractor = image_extractor or ImageExtractor(
+            min_confidence=getattr(config, "min_ocr_confidence", 0.5)
+        )
+        self.temporal_extractor = temporal_extractor or TemporalExtractor()
+
         if config and config.verbose:
             print(f"DataIngestor initialized with config: backend_mode={config.backend_mode.value}")
+
+    def _enabled(self, flag: str, default: bool) -> bool:
+        return bool(getattr(self.config, flag, default)) if self.config else default
 
     _SENTENCE_PATTERN = re.compile(r".+?[.!?](?:\[[^\]]*\])*(?=\s+|$)")
 
@@ -121,15 +140,78 @@ class DataIngestor:
 
         return chunks
 
-    def ingest_document(self, document_id: str, raw_text: str):
-        """Main pipeline: chunk → embed → extract → store."""
+    def _build_modal_chunks(
+        self,
+        document_id: str,
+        raw_text: str,
+        tables: Optional[List[str]] = None,
+        images: Optional[List[str]] = None,
+    ) -> List[Chunk]:
+        """Chunks for every non-prose modality present in the document."""
+        extracted: List[Dict[str, Any]] = []
+
+        if self._enabled("enable_list_extraction", True):
+            extracted.extend(self.list_extractor.extract_from_text(raw_text))
+
+        if tables and self._enabled("enable_table_extraction", True):
+            for table in tables:
+                extracted.extend(self.table_extractor.extract_from_html(table))
+
+        if images and self._enabled("enable_ocr", False):
+            for image_path in images:
+                image_chunk = self.image_extractor.extract_from_image(image_path)
+                if image_chunk:
+                    extracted.append(image_chunk)
+
+        chunks = []
+        for item in extracted:
+            chunks.append(Chunk(
+                chunk_id=str(uuid.uuid4()),
+                document_id=document_id,
+                text=item["text"],
+                embedding=None,
+                metadata={"source": "ingestion_script", "word_count": len(item["text"].split())},
+                chunk_type=item["type"],
+                type_metadata=item.get("type_metadata"),
+            ))
+        return chunks
+
+    def _apply_temporal_metadata(self, chunks: List[Chunk], raw_text: str) -> None:
+        document_date = self.temporal_extractor.infer_document_date(raw_text)
+        for chunk in chunks:
+            metadata = self.temporal_extractor.describe(chunk.text, document_date)
+            mentioned = metadata["mentioned_dates"]
+            chunk.timestamp = (
+                self.temporal_extractor.extract_dates(chunk.text)[0] if mentioned else document_date
+            )
+            chunk.temporal_metadata = metadata
+
+    def ingest_document(
+        self,
+        document_id: str,
+        raw_text: str,
+        tables: Optional[List[str]] = None,
+        images: Optional[List[str]] = None,
+    ):
+        """Main pipeline: chunk → embed → extract → store.
+
+        `tables` (HTML fragments) and `images` (paths) are optional extra
+        modalities indexed alongside the prose.
+        """
         print(f"Starting ingestion for Document: {document_id}")
 
-        # 1. Chunking
+        # 1. Chunking (prose + other modalities)
         chunks = self.chunk_document(document_id, raw_text)
-        print(f"  -> Generated {len(chunks)} chunks.")
+        modal_chunks = self._build_modal_chunks(document_id, raw_text, tables, images)
+        chunks.extend(modal_chunks)
+        print(f"  -> Generated {len(chunks)} chunks ({len(modal_chunks)} non-text).")
 
-        # 2. Embeddings
+        # 2. Temporal metadata
+        if self._enabled("enable_temporal_reasoning", True):
+            self._apply_temporal_metadata(chunks, raw_text)
+            print("  -> Extracted temporal metadata.")
+
+        # 3. Embeddings
         texts = [c.text for c in chunks]
         embeddings = self.embedding_model.encode(texts)
         if hasattr(embeddings, "tolist"):
@@ -179,30 +261,43 @@ class DataIngestor:
         print("  -> Populated Neo4j (Knowledge Graph Store).")
 
         print(f"Successfully completed ingestion for {document_id}!")
+        chunk_type_counts: Dict[str, int] = {}
+        for chunk in chunks:
+            key = chunk.chunk_type.value if isinstance(chunk.chunk_type, ChunkType) else str(chunk.chunk_type)
+            chunk_type_counts[key] = chunk_type_counts.get(key, 0) + 1
+
         return {
             "status": "success",
             "document_id": document_id,
             "chunks": len(chunks),
             "svos": len(all_svos),
             "sqlite_path": self.sqlite_path,
+            "chunk_types": chunk_type_counts,
         }
 
     def _write_sqlite(self, chunks: List[Chunk]):
         conn = sqlite3.connect(self.sqlite_path)
         try:
             with conn:
-                conn.execute("""
-                    CREATE TABLE IF NOT EXISTS chunks (
-                        chunk_id TEXT PRIMARY KEY,
-                        document_id TEXT,
-                        text TEXT,
-                        metadata TEXT
-                    )
-                """)
+                ensure_chunks_schema(conn)
                 for c in chunks:
+                    chunk_type = c.chunk_type.value if isinstance(c.chunk_type, ChunkType) else str(c.chunk_type)
                     conn.execute(
-                        "INSERT OR REPLACE INTO chunks (chunk_id, document_id, text, metadata) VALUES (?, ?, ?, ?)",
-                        (c.chunk_id, c.document_id, c.text, json.dumps(c.metadata))
+                        """
+                        INSERT OR REPLACE INTO chunks
+                        (chunk_id, document_id, text, metadata, chunk_type, type_metadata, timestamp, temporal_metadata)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            c.chunk_id,
+                            c.document_id,
+                            c.text,
+                            json.dumps(c.metadata),
+                            chunk_type,
+                            json.dumps(c.type_metadata) if c.type_metadata else None,
+                            c.timestamp.isoformat() if c.timestamp else None,
+                            json.dumps(c.temporal_metadata) if c.temporal_metadata else None,
+                        ),
                     )
         finally:
             conn.close()

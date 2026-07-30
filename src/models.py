@@ -1,8 +1,59 @@
 """Core data models for the SVO verification pipeline."""
 
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+
+
+class ChunkType(str, Enum):
+    """Modality a chunk was derived from. Text is the historical default."""
+
+    TEXT = "text"
+    TABLE_ROW = "table_row"
+    LIST_ITEM = "list_item"
+    ENTITY = "entity"
+    RELATION = "relation"
+    IMAGE = "image"
+    KB_ENTRY = "kb_entry"
+
+
+@dataclass
+class TemporalScope:
+    """Window a claim is asserted to hold over."""
+
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    temporal_relation: str = "during"  # "before", "after", "during"
+
+    def contains(self, date: datetime) -> bool:
+        if self.start_date and date < self.start_date:
+            return False
+        if self.end_date and date > self.end_date:
+            return False
+        return True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "temporal_relation": self.temporal_relation,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TemporalScope":
+        def _parse(value):
+            if not value:
+                return None
+            if isinstance(value, datetime):
+                return value
+            return datetime.fromisoformat(str(value))
+
+        return cls(
+            start_date=_parse(data.get("start_date")),
+            end_date=_parse(data.get("end_date")),
+            temporal_relation=data.get("temporal_relation", "during"),
+        )
 
 
 @dataclass
@@ -12,6 +63,12 @@ class Chunk:
     text: str
     embedding: Optional[List[float]]
     metadata: Dict[str, Any]
+    chunk_type: ChunkType = ChunkType.TEXT
+    # Modality-specific payload, e.g. {"table_id": ..., "row_num": ..., "headers": [...]}
+    type_metadata: Optional[Dict[str, Any]] = None
+    # When the chunk's content is dated (falls back to the document's inferred date)
+    timestamp: Optional[datetime] = None
+    temporal_metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -32,6 +89,17 @@ class RetrievalResult:
     chunk: Optional[Chunk] = None
     contributing_sources: List[str] = field(default_factory=list)
 
+    # Per-retriever scores and ranks captured before fusion collapses them.
+    lexical_score: Optional[float] = None
+    lexical_rank: Optional[int] = None
+    semantic_score: Optional[float] = None
+    semantic_rank: Optional[int] = None
+    graph_score: Optional[float] = None
+    graph_rank: Optional[int] = None
+    retriever_sources: List[str] = field(default_factory=list)
+    # Normalized inputs and weights the fused score was actually computed from.
+    fusion_breakdown: Optional[Dict[str, Any]] = None
+
 
 @dataclass
 class OntologyAssertion:
@@ -41,6 +109,7 @@ class OntologyAssertion:
     object: str
     polarity: str = "must_hold"
     rule_type: str = "constraint"
+    temporal_scope: Optional[TemporalScope] = None
 
 
 @dataclass
@@ -65,6 +134,16 @@ class EvidenceSpan:
     matched_relation: bool
     matched_object: bool
 
+    # Observability payloads attached by the engine after classification.
+    retrieval_pathway: Optional[Dict[str, Any]] = None
+    annotated_html: Optional[str] = None
+    negation_analysis: Optional[Dict[str, Any]] = None
+    component_matches: Optional[Dict[str, bool]] = None
+
+    # Temporal adjudication (populated when temporal reasoning is enabled).
+    temporal_status: Optional[str] = None  # "current", "outdated", "future"
+    chunk_timestamp: Optional[datetime] = None
+
 
 @dataclass
 class TripleVerdict:
@@ -79,6 +158,12 @@ class TripleVerdict:
     counter_evidence: List[EvidenceSpan]
     retrieval_sources: List[str]
     rule_hits: List[str]
+
+    scoring_breakdown: Optional[Dict[str, Any]] = None
+    decision_thresholds: Optional[Dict[str, str]] = None
+    rejected_evidence: List[Dict[str, Any]] = field(default_factory=list)
+    # Correlation id a client posts back to /feedback/correct.
+    feedback_id: Optional[str] = None
 
 
 @dataclass
