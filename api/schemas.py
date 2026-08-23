@@ -5,6 +5,14 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class TemporalScopeIn(BaseModel):
+    """Optional assertion-time window a claim is asserted to hold over."""
+
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    temporal_relation: str = "during"
+
+
 class TripleIn(BaseModel):
     assertion_id: Optional[str] = None
     subject: str
@@ -12,6 +20,7 @@ class TripleIn(BaseModel):
     object: str
     polarity: str = "must_hold"
     rule_type: str = "constraint"
+    temporal_scope: Optional[TemporalScopeIn] = None
 
 
 class ValidateRequest(BaseModel):

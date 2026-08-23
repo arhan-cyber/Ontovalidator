@@ -1,8 +1,13 @@
 # Ontovalidator Pipeline - Development Roadmap
 
-**Last Updated:** 2026-07-10  
-**Current Status:** B+ (Production-ready architecture, not production-ready features)  
-**Time to Ship:** 2-4 weeks (with focused effort on critical items)
+**Last Updated:** 2026-08-23  
+**Current Status:** A- (All 8 enhancement-plan features shipped; API complete; SPA frontend in progress)  
+**Time to Ship:** 1-2 weeks  
+
+> **Refresh note (2026-08-23):** Statuses below were re-audited against the codebase.
+> Done since the last update: caching layer (#5), REST API (#6), health endpoint (#8),
+> score transparency docs via `scoring_breakdown`/`decision_thresholds` (#9), feedback
+> loop (#14). Line numbers (#2) are deliberately deferred until after the React SPA ships.
 
 ---
 
@@ -91,7 +96,9 @@
 
 ---
 
-### 2. Line Numbers in Output
+### 2. Line Numbers in Output — ⏸ DEFERRED
+> Decision (2026-08-23): deferred until after the React SPA frontend ships; not required by any current API consumer.
+
 - [ ] Modify chunking to track line numbers
   - [ ] Add line_number to Chunk metadata
   - [ ] Add char_offset to Chunk metadata
@@ -148,18 +155,14 @@
 
 ## 🟡 HIGH PRIORITY (Do ASAP)
 
-### 5. Caching Layer
-- [ ] Implement in-memory cache
-  - [ ] Cache chunks by document_id
-  - [ ] Cache embeddings by document_id
-  - [ ] Cache retrieval results by query
-  - [ ] Set TTL (time-to-live) for cache entries
-- [ ] OR integrate Redis
-  - [ ] Add redis dependency
-  - [ ] Implement RedisCache class
-  - [ ] Handle cache misses
-- [ ] Measure performance improvement
-  - [ ] 10x speedup on repeated documents (target)
+### 5. Caching Layer — ✅ DONE (CacheEngine shipped)
+- [x] Implement in-memory cache (`src/cache/cache_engine.py`, shared across retrievers/embeddings/verdicts)
+- [x] Cache chunks by document_id
+- [x] Cache embeddings by document_id
+- [x] Cache retrieval results by query (with corpus fingerprints for invalidation)
+- [x] Set TTL for cache entries (verdict cache TTL wired; embedding/retrieval TTL knobs env-settable but not yet consumed)
+- [ ] OR integrate Redis (not needed at current scale)
+- [ ] Measure performance improvement (benchmark test still missing)
 
 **Priority:** HIGH  
 **Effort:** 2-4 hours  
@@ -167,16 +170,15 @@
 
 ---
 
-### 6. REST API
-- [ ] Build FastAPI application
-  - [ ] POST /validate endpoint (single triple)
-  - [ ] POST /validate-batch endpoint (multiple triples, one doc)
-  - [ ] GET /health endpoint
-  - [ ] GET /config endpoint
-- [ ] Add request/response validation
-  - [ ] Validate input document and triples
-  - [ ] Return structured JSON responses
-  - [ ] Handle errors gracefully
+### 6. REST API — ✅ DONE (FastAPI shipped)
+- [x] Build FastAPI application (`api/app.py`)
+  - [x] POST /validate endpoint (batch of triples, one doc)
+  - [x] GET /health endpoint (30 s TTL cache + ?force= bypass)
+  - [x] GET /config endpoint
+- [x] Add request/response validation (Pydantic schemas in `api/schemas.py`)
+  - [x] Validate input document and triples
+  - [x] Return structured JSON responses
+  - [x] Handle errors gracefully (`api/errors.py`, double-nested envelope)
 - [ ] Add authentication (optional)
   - [ ] API key support
   - [ ] Rate limiting
@@ -207,17 +209,16 @@
 
 ---
 
-### 8. Backend Health Checks (Default)
-- [ ] Run health checks on startup
-  - [ ] Check Elasticsearch connectivity
-  - [ ] Check Milvus connectivity
-  - [ ] Check Neo4j connectivity
+### 8. Backend Health Checks (Default) — 🟡 PARTIAL
+- [x] Run health checks (`HealthCheckRunner`, GET /health)
+  - [x] Check Elasticsearch connectivity
+  - [x] Check Milvus connectivity
+  - [x] Check Neo4j connectivity
 - [ ] Fail fast if required backends unavailable
   - [ ] If require_production_backends=true, fail startup
   - [ ] If backend critical to pipeline, warn loudly
-- [ ] Add health check to validate_triples.py
-  - [ ] Optional --health-check flag (already exists)
-  - [ ] Make it default behavior
+- [x] Health check available via API and CLI
+  - [ ] Make it default behavior in validate_triples.py
 
 **Priority:** HIGH  
 **Effort:** 1-2 hours  
@@ -225,20 +226,13 @@
 
 ---
 
-### 9. Score Documentation
-- [ ] Document what each score means
-  - [ ] 0.0-0.2: Very low confidence
-  - [ ] 0.2-0.4: Low confidence
-  - [ ] 0.4-0.6: Uncertain
-  - [ ] 0.6-0.8: Confident
-  - [ ] 0.8-1.0: Very confident
-- [ ] Add confidence level to output
-  - [ ] Replace numeric score with descriptive level
-  - [ ] Add confidence interval (±tolerance)
-- [ ] Document score components
-  - [ ] What retrieval score contributes
-  - [ ] What match quality contributes
-  - [ ] What fusion boosting contributes
+### 9. Score Documentation — ✅ DONE
+- [x] Document what each score means (`scoring_breakdown` on every verdict)
+- [x] Add confidence level to output (label + score + rationale)
+- [x] Document score components
+  - [x] What retrieval score contributes (retrieval_pathway)
+  - [x] What match quality contributes (component_matches, annotated_html)
+  - [x] What fusion boosting contributes (fusion_explanation)
 
 **Priority:** HIGH  
 **Effort:** 2-3 hours  
@@ -317,14 +311,13 @@
 
 ---
 
-### 14. Feedback & Learning Mechanism
-- [ ] Add endpoint to report incorrect verdicts
-  - [ ] POST /feedback {document_id, triple, actual_label, notes}
-  - [ ] Store in database
-- [ ] Analyze feedback
-  - [ ] Which triples are most error-prone?
-  - [ ] Which domains need improvement?
-  - [ ] False positive vs. false negative rates
+### 14. Feedback & Learning Mechanism — ✅ DONE
+- [x] Add endpoint to report incorrect verdicts
+  - [x] POST /feedback/correct {feedback_id or full verdict fields, actual_label, reason}
+  - [x] Store in SQLite (`src/feedback/recorder.py`)
+- [x] Analyze feedback
+  - [x] Confusion matrix + retriever combination accuracy (GET /feedback/analysis)
+  - [x] Automated recommendations (`src/feedback/dashboard.py`)
 - [ ] (Optional) Fine-tune models on feedback
 
 **Priority:** MEDIUM  

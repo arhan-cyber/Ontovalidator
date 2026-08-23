@@ -46,7 +46,7 @@ class TestLexicalRetrieverFactory:
 
             # Should attempt to create LexicalRetriever
             assert retriever is not None
-            mock_get_es.assert_called_once_with(host="localhost", port=9200)
+            mock_get_es.assert_called_once_with(hosts=["http://localhost:9200"])
 
     def test_factory_creates_sqlite_lexical_fallback(self, temp_db_path):
         """Test that ES disabled creates SQLiteLexicalRetriever."""
@@ -259,6 +259,7 @@ class TestEvidenceSpanClassifierFactory:
         assert isinstance(classifier.base_classifier, HeuristicEvidenceSpanClassifier)
 
     def test_factory_falls_back_to_heuristic_when_nli_model_fails_to_load(self, temp_db_path):
+        pytest.importorskip("transformers")
         from src.classification.evidence_span_classifier import HeuristicEvidenceSpanClassifier
 
         config = PipelineConfig(
