@@ -1,6 +1,6 @@
 # Frontend Implementation: Subagent Work Packages
 
-10 discrete, self-contained work packages for the React SPA rebuild. Each scoped to 1–2 hours, with clear entry/exit criteria and acceptance tests.
+11 discrete, self-contained work packages for the React SPA rebuild. Each scoped to 1–2 hours, with clear entry/exit criteria and acceptance tests. Amendment v2: adds a dedicated visualization layer (Recharts + custom heatmap/bars), full `/config` and `/health` field coverage, and typed feedback-analysis interfaces.
 
 ---
 
@@ -9,7 +9,7 @@
 **Scope:** Initialize Vite + React + TypeScript project from scratch, configure all tooling.
 
 **Deliverables:**
-- `frontend/package.json` with React, React DOM, React Router DOM, TypeScript, Vite, and dev dependencies
+- `frontend/package.json` with React, React DOM, React Router DOM, **Recharts**, TypeScript, Vite, and dev dependencies
 - `frontend/vite.config.ts` with React plugin, dev server proxy for `/validate`, `/config`, `/health`, `/feedback/*` → `http://localhost:8000`
 - `frontend/tsconfig.json` with `jsx: react-jsx`, `target: ES2020`, `moduleResolution: bundler`
 - `frontend/index.html` as Vite entry point with `<div id="root">` and `<script type="module" src="/src/main.tsx">`
@@ -21,7 +21,7 @@
 **Downstream:** All other packages
 
 **Acceptance Tests:**
-1. `npm install` completes with no errors
+1. `npm install` completes with no errors (recharts resolves)
 2. `npm run dev` starts Vite on port 5173 without errors
 3. `npm run build` generates `frontend/dist/` with `index.html`, `assets/*.js`, `assets/*.css`
 4. Navigating to `http://localhost:5173/` returns 200 and serves static HTML
@@ -32,27 +32,31 @@
 
 ## PACKAGE 2: Type Layer & API Client
 
-**Scope:** Create TypeScript interfaces mirroring backend schemas, build fetch client wrapper with error normalization.
+**Scope:** Create TypeScript interfaces mirroring backend schemas exactly, build fetch client wrapper with error normalization.
 
 **Deliverables:**
-- `frontend/src/api/types.ts` with interfaces:
-  - `TripleIn`, `MatchedOut`, `EvidenceOut`, `RejectedEvidenceOut`, `VerdictOut`, `SummaryOut`, `BackendStatusOut`, `ValidateResponse`
-  - `CorrectionRequest`, `CorrectionResponse`
-  - `FeedbackAnalysisResponse` (with `summary`, `error_analysis`, `retriever_performance`, `recommendations` as `Dict[string, unknown>`)
-  - `BackendHealthOut`, `HealthResponse`, `ConfigResponse`
+- `frontend/src/api/types.ts`:
+  - Core response types: `TripleIn`, `MatchedOut`, `EvidenceOut`, `RejectedEvidenceOut`, `VerdictOut`, `SummaryOut`, `BackendStatusOut`, `ValidateResponse`, `BackendHealthOut`, `HealthResponse`, `ConfigResponse`, `CorrectionRequest`, `CorrectionResponse`
+  - Typed feedback-analysis payloads (exact keys confirmed from `src/feedback/dashboard.py::compute_metrics`):
+    - `ConfusionMatrix = Record<string, Record<string, number>>`
+    - `MostCommonError { predicted: string; actual: string; count: number }`
+    - `FeedbackSummary { total_corrections: number; system_accuracy: number; window_days: number }`
+    - `RetrieverCombinationStats { retrieval_sources: string[]; total_cases: number; accuracy: number; error_rate: number }`
+    - `RetrieverPerformance { best_combination: RetrieverCombinationStats | null; worst_combination: ... | null; all_combinations: RetrieverCombinationStats[] }`
+    - `FeedbackAnalysisResponse { summary: FeedbackSummary; error_analysis: { most_common_error: MostCommonError | null; confusion_matrix: ConfusionMatrix }; retriever_performance: RetrieverPerformance; recommendations: string[] }`
 - `frontend/src/api/client.ts` with exported async functions:
-  - `validate(req: ValidateRequest): Promise<ValidateResponse>` (POST /validate)
-  - `getConfig(): Promise<ConfigResponse>` (GET /config)
-  - `getHealth(): Promise<HealthResponse>` (GET /health)
-  - `submitCorrection(req: CorrectionRequest): Promise<CorrectionResponse>` (POST /feedback/correct)
-  - `getFeedbackAnalysis(days: number): Promise<FeedbackAnalysisResponse>` (GET /feedback/analysis?days=N)
-  - Error normalization: catch double-nested `{"error": {"error": "...", "detail": "..."}}`, return `{message: string}`, throw `ApiError` class
+  - `validate(req)` → POST /validate
+  - `getConfig()` → GET /config
+  - `getHealth(force = false)` → GET `/health?force=true` when force is set (bypasses server's 30 s TTL cache)
+  - `submitCorrection(req)` → POST /feedback/correct
+  - `getFeedbackAnalysis(days: number)` → GET /feedback/analysis?days=N
+  - Error normalization: catch double-nested `{"error": {...}}`, return `{message: string}`, throw `ApiError` class
 
 **Entry Criteria:** Package 1 complete; API running
 
 **Dependencies:** Package 1 (TypeScript setup)
 
-**Downstream:** Packages 3, 6, 7, 8
+**Downstream:** All page packages (7, 8, 9)
 
 **Acceptance Tests:**
 1. TypeScript compilation succeeds
@@ -61,7 +65,7 @@
 4. Malformed validate request returns `ApiError` with readable `.message`
 5. All exports are named (not default)
 
-**Notes:** Use simple `fetch()` with no external library. Create integration test file `src/api/__test__/client.test.ts` (no network calls, just type/export validation). `FeedbackAnalysisResponse` fields intentionally typed as `Dict[string, unknown>` — Package 7 will read `dashboard.py::compute_metrics` and adapt.
+**Notes:** Simple `fetch()`, no external library. The generic key/value fallback renderer from v1 of this plan is no longer needed — dashboard shapes are fully typed.
 
 ---
 
@@ -71,10 +75,11 @@
 
 **Deliverables:**
 - `frontend/src/components/shared/Card.tsx` — wrapper div with `className="card"`, optional title/error/loading states
-- `frontend/src/components/shared/Button.tsx` — button with variants: primary, secondary, danger, icon; optional disabled, loading, onClick, type
-- `frontend/src/components/shared/LabelDot.tsx` — colored dot for label: takes `label: "supported" | "contradicted" | "partial" | "unknown"`
-- `frontend/src/components/shared/ErrorBanner.tsx` — dismissible top banner; takes `message: string` and `onDismiss: () => void`
-- `frontend/src/components/shared/LoadingSpinner.tsx` — text or animated spinner; takes optional `message: string`
+- `frontend/src/components/shared/Button.tsx` — variants: primary, secondary, danger, icon; optional disabled, loading, onClick, type
+- `frontend/src/components/shared/LabelDot.tsx` — colored dot for label: `"supported" | "contradicted" | "partial" | "unknown"`
+- `frontend/src/components/shared/ErrorBanner.tsx` — dismissible top banner; takes `message` and `onDismiss`
+- `frontend/src/components/shared/LoadingSpinner.tsx` — text or animated spinner; optional `message`
+- `frontend/src/components/shared/StatChip.tsx` — small label+value chip used by summary strips and dashboard stat rows
 
 **Entry Criteria:** Packages 1–2 complete
 
@@ -88,57 +93,59 @@
 3. Card renders `<div className="card">` with children
 4. Button renders `<button>` with correct CSS classes per variant
 5. LabelDot renders `<span className="label-{label}">` dot
-6. ErrorBanner renders only when message provided; dismiss calls onDismiss
-7. LoadingSpinner renders text + optional spinner
+6. StatChip renders `<span className="stat-chip">` with label/value slots
+7. ErrorBanner renders only when message provided; dismiss calls onDismiss
 8. All components accept and pass through standard HTML attributes
 
-**Notes:** Use CSS variables from theme (Package 5): `--bg`, `--panel`, `--border`, `--text`, `--muted`, `--accent`, `--green`, `--red`, `--amber`, `--gray`. Keep unstyled; lean on theme.css. Pass `className` and `style` as spread props for reusability.
+**Notes:** Use CSS variables from theme (Package 5). Keep unstyled; lean on theme.css.
 
 ---
 
 ## PACKAGE 4: Router & Layout Structure
 
-**Scope:** Set up React Router with three main routes, shared layout shell, navigation.
+**Scope:** Set up React Router with three main routes, shared layout shell, navigation, lazy-loaded route chunks.
 
 **Deliverables:**
 - `frontend/src/main.tsx` — ReactDOM.createRoot + `<BrowserRouter>` + `<App />`
 - `frontend/src/App.tsx` — top-level shell with:
   - Header (title "SVO Triple Verifier", nav links/buttons)
-  - `<Routes>` with `/validate`, `/feedback`, `/health`
-  - Fallback 404 route (redirect to `/validate` or show message)
-  - Global error boundary (catches render errors, displays ErrorBanner)
+  - `<Routes>` with `/validate` (default), `/feedback`, `/health`
+  - Each page wrapped in `React.lazy(() => import(...))` + `<Suspense fallback={<LoadingSpinner />}>` so chart-heavy pages split into separate bundles
+  - Fallback 404 route (redirect to `/validate`)
+  - Global error boundary
 - `frontend/src/pages/` directory structure (files stubbed; created as empty TSX)
 
 **Entry Criteria:** Packages 1, 3 complete
 
 **Dependencies:** Package 1 (React/Vite), Package 3 (shared components)
 
-**Downstream:** Packages 6–8
+**Downstream:** Packages 7–9
 
 **Acceptance Tests:**
 1. TypeScript compilation succeeds
 2. App starts without errors (`npm run dev`)
 3. Clicking nav links changes URL and renders correct route
-4. Navigating to `/nonexistent` redirects or shows 404
+4. Navigating to `/nonexistent` redirects to `/validate`
 5. Header visible across all pages
+6. Network tab shows separate chunk per page on first visit
 
-**Notes:** Use `react-router-dom` v6+ with `createBrowserRouter` or `BrowserRouter + Routes`. Global error boundary can be class component with `componentDidCatch` or error boundary library. Header includes nav to all three pages.
+**Notes:** Use `react-router-dom` v6+.
 
 ---
 
-## PACKAGE 5: Theme & Global Styles
+## PACKAGE 5: Theme & Global Styles (incl. chart styles)
 
-**Scope:** Port dark-theme CSS variables and global styles from existing `frontend/styles.css`.
+**Scope:** Port dark-theme CSS variables and global styles from existing `frontend/styles.css`; add visualization styles.
 
 **Deliverables:**
-- `frontend/src/theme.css` with:
-  - `:root` CSS variable definitions (from existing `styles.css`): `--bg`, `--panel`, `--border`, `--text`, `--muted`, `--accent`, `--green`, `--red`, `--amber`, `--gray`
-  - Global resets: `* { box-sizing: border-box; }`, `body { margin: 0; font-family: ...; background: var(--bg); color: var(--text); }`
-  - `.topbar` (header), `main` (max-width 900px, centered, padding)
-  - `.card`, `.btn` (primary/secondary/danger), `.icon-btn`, `.loading`, `.error-banner`
-  - Label-dot colors: `.label-supported`, `.label-contradicted`, `.label-partial`, `.label-unknown`
-  - `.submit-row`, `.settings-grid`, `.triple-row`, `.triple-header`, `.summary`, `.verdict-card`, `.verdict-title`, `.score`, `.rationale`, `.evidence-item`
-- `frontend/src/index.css` or import theme.css in `main.tsx`
+- `frontend/src/theme.css`:
+  - `:root` CSS variables (exact values from old `styles.css`): `--bg #0f1216`, `--panel #171b21`, `--border #2a2f37`, `--text #e6e9ef`, `--muted #9aa4b2`, `--accent #4f8cff`, `--green #38c172`, `--red #e3342f`, `--amber #f2a900`, `--gray #6b7280`
+  - Global resets, `.topbar`, `main` (max-width 900px centered), `.card`, `.btn` variants, `.icon-btn`, `.loading`, `.error-banner`
+  - Label-dot colors: `.label-supported/.label-contradicted/.label-partial/.label-unknown`
+  - Existing classes: `.submit-row`, `.settings-grid`, `.triple-row`, `.triple-header`, `.summary`, `.verdict-card`, `.verdict-title`, `.score`, `.rationale`, `.evidence-item`
+  - **New chart styles**: `.stat-chip`, `.bar-track`/`.bar-fill` (+ `.positive`/`.negative`), `.fusion-gauge`, `.heatmap-grid`/`.hm-cell` (+ intensity modifiers `.hm-diag-N` green scale / `.hm-off-N` red scale, `.hm-max` outline for most-common-error), `.latency-bar`, `.rejected-item` (muted + line-through)
+  - Recharts overrides: dark tooltip background/border via a `.recharts-default-tooltip` override class
+- Import theme.css in `main.tsx`
 
 **Entry Criteria:** Packages 1, 4 complete; old `frontend/styles.css` available
 
@@ -147,194 +154,151 @@
 **Downstream:** All other packages
 
 **Acceptance Tests:**
-1. `npm run dev` applies dark theme (dark bg, light text, colored accents)
+1. `npm run dev` applies dark theme
 2. DevTools shows `:root` CSS variables defined and in use
 3. All existing CSS class names present and correctly styled
-4. `npm run build` includes theme.css in output
+4. Heatmap/bar/gauge classes render visibly on a scratch page
+5. `npm run build` includes theme.css in output
 
-**Notes:** Copy exact variable values from old `styles.css` to avoid color drift. Delete old `styles.css` after confirming theme.css works. No light-mode support needed (plan specifies dark only).
+**Notes:** Copy exact variable values from old `styles.css` to avoid color drift. No light-mode support needed.
 
 ---
 
-## PACKAGE 6: Validate Page (Main Workflow)
+## PACKAGE 6: Visualization Chart Components (NEW)
 
-**Scope:** Build primary validation page with form, results display, all 8 enhancements rendered always-expanded.
+**Scope:** Build the shared dark-themed visualization layer consumed by all three pages. Recharts for bar/radial charts; custom div/CSS components for signed micro-bars, pathway bars, heatmap, and latency bars.
+
+**Deliverables** (`frontend/src/components/charts/`):
+- `chartTheme.ts` — palette constants mapped from CSS vars (`SUPPORTED: var(--green)` etc.), shared dark tooltip props (contentStyle/background/border), axis/text colors from `--muted`
+- `LabelDistributionChart.tsx` — Recharts vertical BarChart; props `{ supported, contradicted, partial, unknown }`; each bar filled with its label color; tooltip shows counts
+- `ChunkTypeHistogram.tsx` — Recharts horizontal BarChart; props `{ data: Record<string, number> }`; accent fill; empty state "No chunks"
+- `AccuracyDonut.tsx` — Recharts RadialBarChart gauge; props `{ accuracy: number }` (0–1); percentage label center; green→amber→red fill by value bands (≥0.8 green, ≥0.5 amber, else red); empty state when no corrections
+- `RetrieverAccuracyChart.tsx` — Recharts horizontal grouped BarChart; props `{ rows: RetrieverCombinationStats[] }`; two series: accuracy (`--green`) and error_rate (`--red`); combination labels as joined source names; sorted worst-first by caller
+- `ConfusionHeatmap.tsx` — pure CSS grid; props `{ matrix: ConfusionMatrix; mostCommonError?: MostCommonError | null }`; fixed row/col order `[supported, contradicted, partial, unknown]`; cell background = count-intensity shade (diagonal green scale, off-diagonal red scale, alpha proportional to count/max); `title` tooltip "predicted → actual: N"; `mostCommonError` cell gets `.hm-max` outline; renders row/col headers and legend
+- `ScoreContributionBars.tsx` — div-based signed bars; props `{ breakdown: Record<string, unknown> }`; numeric keys → row of [key, signed bar normalized to max |value|, value]; positive `--green`, negative `--red`; `final_score` row emphasized (bold + full-width marker); non-numeric values rendered as muted text lines
+- `PathwayMiniBars.tsx` — div-based 0–1 scaled bar; props `{ score: number | null }`; null → muted "not retrieved"; used per retriever column; plus exported `FusionGauge` thin indicator scaling `fusion_score`
+- `LatencyBars.tsx` — div-based bars; props `{ entries: Array<{ name: string; latency_ms: number | null }> }`; width relative to max latency; missing/null → muted dash
+
+**Entry Criteria:** Packages 1–5 complete
+
+**Dependencies:** Packages 1, 2 (types), 3 (shared), 5 (theme/chart styles)
+
+**Downstream:** Packages 7, 8, 9
+
+**Acceptance Tests:**
+1. TypeScript compilation succeeds
+2. Each chart exports a named component and renders its empty state when given empty/missing data (no crash)
+3. LabelDistributionChart bars use correct label colors
+4. ConfusionHeatmap shades diagonal green / off-diagonal red proportionally to counts; outlined cell matches provided mostCommonError
+5. ScoreContributionBars handles negative values and non-numeric extras without crashing
+6. Tooltips readable on dark background (no white-on-white)
+7. A scratch route rendering every component passes visual smoke test
+
+**Notes:** No state, no fetching — pure presentational props-in/components-out so they stay independently testable.
+
+---
+
+## PACKAGE 7: Validate Page (Main Workflow)
+
+**Scope:** Build primary validation page with form, results display, all 8 enhancements rendered always-expanded, with visualizations.
 
 **Deliverables:**
-- `frontend/src/pages/ValidatePage.tsx` — orchestrates:
-  - DocumentForm, ResultsSummary, VerdictCard components
-  - Form submission state, error state, results
-  - Calls `client.validate(req)` on submit
-  - ErrorBanner on API error, LoadingSpinner during validation
-  - Renders results only after success
-  - Chunk_types histogram above verdicts
+- `frontend/src/pages/ValidatePage.tsx` — orchestrates DocumentForm, ResultsSummary, VerdictCard; form submission/error/results state; calls `client.validate(req)`; ErrorBanner on API error, LoadingSpinner during validation; renders results only after success; ingestion info line (`ingestion_status`, `chunks_ingested`, `svos_extracted`) and backend status dots above the summary
+- `frontend/src/components/validate/DocumentForm.tsx` — textarea for `raw_text`, TriplesEditor, settings section (embedding_model / svo_extractor selects populated from `/config` `available_*` lists, top_k number input), submit button; validation: ≥1 triple, non-empty raw_text
+- `frontend/src/components/validate/TriplesEditor.tsx` — triple table (Subject, Relation, Object, action); add/remove rows; skips fully-empty rows, errors on partially-empty rows
+- `frontend/src/components/validate/ResultsSummary.tsx` — StatChips row (total, supported, contradicted, partial, unknown, avg score 2dp, cache hits) + `LabelDistributionChart` + `ChunkTypeHistogram` side by side above verdicts
+- `frontend/src/components/validate/VerdictCard.tsx` — LabelDot + triple + score title; rationale; evidence list (EvidenceItem); RejectedEvidenceList; ScoringBreakdown; RetrievalPathway per evidence; FeedbackCorrectionForm
+- `frontend/src/components/validate/ScoringBreakdown.tsx` — wraps `ScoreContributionBars` for `scoring_breakdown`, then `decision_thresholds` as three explanation lines (contradicted_rule / supported_rule / chosen_label)
+- `frontend/src/components/validate/RejectedEvidenceList.tsx` — always-expanded; each `RejectedEvidenceOut` muted/struck-through with chunk_id, inline bar for retrieval_score, adjudication, reason_rejected
+- `frontend/src/components/validate/EvidenceItem.tsx` — annotated HTML via `dangerouslySetInnerHTML`; negation badge (detected + keywords + scope); S/V/O component-match check/cross icons; temporal badge ("current" green, "outdated · date" amber, hidden if null/unscoped/undated); chunk metadata (chunk_id, source, confidence, match_type)
+- `frontend/src/components/validate/RetrievalPathway.tsx` — three columns (Lexical/Semantic/Graph); each: `PathwayMiniBars` score bar, rank, score, reason ("not retrieved" when null); `FusionGauge` + fusion_explanation below
+- `frontend/src/components/validate/FeedbackCorrectionForm.tsx` — collapsible "Correct this verdict"; label dropdown, optional reason; POST `/feedback/correct` `{feedback_id, actual_label, reason}`; "Correction recorded" on success; on 404 falls back to resending full verdict fields
 
-- `frontend/src/components/validate/DocumentForm.tsx` — form with:
-  - Textarea for `raw_text`
-  - TriplesEditor component
-  - Settings section: embedding_model, svo_extractor, top_k (from `/config`)
-  - Submit button
-  - Validation: at least one triple, non-empty raw_text
-  - Calls `onSubmit(req: ValidateRequest)`
+**Entry Criteria:** Packages 1–6 complete; API `/validate` working
 
-- `frontend/src/components/validate/TriplesEditor.tsx` — triple table:
-  - Table header: Subject, Relation, Object, (action column)
-  - One triple-row per triple (start with 1 empty row)
-  - Add Row button, Remove Row button (delete if multiple, clear if only one)
-  - Skips fully-empty rows, errors on partially-empty rows
-
-- `frontend/src/components/validate/ResultsSummary.tsx` — summary strip:
-  - Total, Supported, Contradicted, Partial, Unknown (from `summary`)
-  - Avg score (2 decimals), Cache hits (from `summary.cache_hits`)
-  - Chunk types histogram (e.g., "text: 12, table_row: 3")
-
-- `frontend/src/components/validate/VerdictCard.tsx` — one verdict (always-expanded):
-  - Title: LabelDot + triple (S–R–O) + score
-  - Rationale
-  - Evidence list (calls EvidenceItem)
-  - Rejected evidence list (calls RejectedEvidenceList)
-  - Scoring breakdown (calls ScoringBreakdown)
-  - Feedback correction form (calls FeedbackCorrectionForm)
-
-- `frontend/src/components/validate/ScoringBreakdown.tsx` — scoring transparency:
-  - Each key in `scoring_breakdown` as labeled row (baseline, support/partial/refute components, agreement_bonus, raw_score, final_score, adjustment_reason/lm_judge_label)
-  - `decision_thresholds` below as explanation (contradicted rule / supported rule / chosen label)
-
-- `frontend/src/components/validate/RejectedEvidenceList.tsx` — always-expanded section:
-  - Each RejectedEvidenceOut with muted/struck-through styling
-  - chunk_id, retrieval_score, adjudication, reason_rejected
-
-- `frontend/src/components/validate/EvidenceItem.tsx` — one evidence span:
-  - Annotated HTML (via `dangerouslySetInnerHTML`, safe per plan)
-  - Negation analysis badge (if present): negation_detected, keywords, scope
-  - Component matches: S/V/O colored icons (if present)
-  - Temporal status badge (if present): "current" (green), "outdated · date" (amber), hidden if null/unscoped/undated
-  - Chunk metadata: chunk_id, source, confidence, match_type
-
-- `frontend/src/components/validate/RetrievalPathway.tsx` — per-retriever info:
-  - Three-column layout: Lexical, Semantic, Graph
-  - Each shows: rank, score, reason (or "not retrieved" if null)
-  - Fusion score + explanation below
-  - Muted/smaller font
-
-- `frontend/src/components/validate/FeedbackCorrectionForm.tsx` — inline feedback UI:
-  - Collapsible form ("Correct this verdict")
-  - Label dropdown (supported/contradicted/partial/unknown)
-  - Optional reason text area
-  - Submit button
-  - POST to `/feedback/correct` with `{feedback_id, actual_label, reason}`
-  - Show "Correction recorded" on success
-  - On 404: fall back to accepting full verdict fields
-
-**Entry Criteria:** Packages 1–5 complete; API `/validate` working
-
-**Dependencies:** Packages 1–5
+**Dependencies:** Packages 1–6
 
 **Downstream:** None (leaf feature)
 
 **Acceptance Tests:**
-1. Page loads, displays DocumentForm, triples table, settings, submit button
-2. Add/remove triple rows work
-3. Empty raw_text shows error
-4. Submit with triple + text calls `/validate`, renders ResultsSummary + VerdictCards
-5. Each VerdictCard shows: title, score, rationale, evidence list, rejected evidence (if any), scoring breakdown, temporal badges (if present), retrieval pathway, negation analysis, component matches
-6. FeedbackCorrectionForm: click opens form, submit POSTs to `/feedback/correct`
-7. Chunk types histogram renders above verdicts
-8. Temporal badges: "current" (green), "outdated · date" (amber), hidden if null
+1. Page loads with DocumentForm, triples table, settings, submit button
+2. Add/remove triple rows work; empty raw_text shows error
+3. Submit calls `/validate`, renders ResultsSummary + VerdictCards
+4. ResultsSummary shows stat chips, label chart, and chunk-type histogram
+5. Each VerdictCard shows title/score/rationale/evidence/rejected/scoring bars/temporal badges/pathway bars/negation/component matches
+6. ScoreContributionBars ends at final_score and matches verdict.score
+7. Pathway null case collapses to "not retrieved"
+8. FeedbackCorrectionForm POSTs successfully on submit
 9. No TypeScript errors
 
-**Notes:** Most complex page; break into focused files. Form state in DocumentForm/ValidatePage (React state, no Redux). Each component independently testable. Negation/component_matches/temporal_status optional; render if present. FeedbackCorrectionForm is small; POST on submit, refresh status flag in parent.
+**Notes:** Most complex page; break into focused files. React state only, no Redux.
 
 ---
 
-## PACKAGE 7: Feedback Page (Dashboard & Analysis)
+## PACKAGE 8: Feedback Page (Dashboard & Analysis)
 
-**Scope:** Build dashboard for feedback analysis (confusion matrix, retriever performance, recommendations).
+**Scope:** Chart-driven dashboard for feedback analysis over a selectable day window.
 
 **Deliverables:**
-- `frontend/src/pages/FeedbackPage.tsx` — page component:
-  - Loads `/feedback/analysis?days=N` on mount
-  - Day range selector (default 30)
-  - ErrorBanner if `/feedback/analysis` fails (e.g., 503)
-  - LoadingSpinner while fetching
-  - Renders ConfusionMatrix, RetrieverPerformanceTable, RecommendationsList
+- `frontend/src/pages/FeedbackPage.tsx` — loads `/feedback/analysis?days=N` on mount; day-range selector (7/14/30/90, default 30) re-fetching on change; ErrorBanner on failure (e.g., 503 feedback_disabled); LoadingSpinner while fetching; renders AccuracyDonut + corrections StatChip, ConfusionMatrix, RetrieverPerformanceTable, RecommendationsList
+- `frontend/src/components/feedback/ConfusionMatrix.tsx` — legend + most-common-error callout line ("Most common error: predicted → actual (N)") + wraps `ConfusionHeatmap`
+- `frontend/src/components/feedback/RetrieverPerformanceTable.tsx` — table (Combination, Total, Accuracy %, Error Rate %) worst-first, best/worst badges, paired `RetrieverAccuracyChart` beside/below it
+- `frontend/src/components/feedback/RecommendationsList.tsx` — card list with icons; empty state "No recommendations at this time"
 
-- `frontend/src/components/feedback/ConfusionMatrix.tsx` — confusion matrix visualization:
-  - Rows: predicted label; Columns: actual label; Cells: count
-  - Diagonal (correct) in green, off-diagonal in red/warning
-  - Empty: show "No corrections recorded yet"
+**Entry Criteria:** Packages 1–6 complete; `/feedback/analysis` endpoint working
 
-- `frontend/src/components/feedback/RetrieverPerformanceTable.tsx` — retriever accuracy table:
-  - Columns: Retriever Combination, Total Cases, Accuracy, Error Rate
-  - Rows: sorted by error rate (worst first)
-  - Highlight best/worst combos if available
-  - Empty: show "No retriever data"
-
-- `frontend/src/components/feedback/RecommendationsList.tsx` — actionable recommendations:
-  - Each recommendation as card/list item with icon
-  - Empty: show "No recommendations at this time"
-
-**Entry Criteria:** Packages 1–5 complete; Package 2 complete; `/feedback/analysis` endpoint working
-
-**Dependencies:** Packages 1–5, Package 2
+**Dependencies:** Packages 1–6
 
 **Downstream:** None (leaf feature)
 
 **Acceptance Tests:**
-1. Page loads, shows day selector (default 30) and loading spinner
-2. After `/feedback/analysis?days=30` returns, spinner disappears, three components render
-3. ConfusionMatrix displays grid with predicted/actual labels and counts
-4. RetrieverPerformanceTable shows all combinations with accuracy/error rates
-5. RecommendationsList shows all recommendation strings
-6. Changing day selector triggers new API call and re-renders
-7. If `/feedback/analysis` fails with 503, ErrorBanner shows message
-8. All fields render defensively (no crashes on unexpected shapes)
+1. Page loads with day selector (default 30) and spinner
+2. On response: donut shows system_accuracy band color; corrections chip matches total_corrections
+3. Heatmap grid displays predicted/actual labels with counts and intensity shading; correction submitted via Validate page appears here after refresh
+4. most_common_error cell outlined and echoed in callout
+5. Retriever table lists all combinations sorted worst-first; chart bars match table numbers; best/worst badges correct
+6. Changing day selector triggers new API call and re-render
+7. 503 → ErrorBanner with readable message
+8. All components render defensively (no crash on empty matrix)
 
-**Notes:** **Before finalizing**, read `src/feedback/dashboard.py::compute_metrics()` (lines 18–38) to understand exact keys:
-- `summary`: `total_corrections`, `system_accuracy`, `window_days`
-- `error_analysis`: `most_common_error`, `confusion_matrix`
-- `retriever_performance`: `best_combination`, `worst_combination`, `all_combinations` (each: `retrieval_sources`, `total_cases`, `accuracy`, `error_rate`)
-- `recommendations`: list of strings
-
-Use generic fallback renderer for unexpected nested objects. Handle label with no errors (show 0s or hide row).
+**Notes:** Exact keys are typed in Package 2 — no generic fallback renderer needed.
 
 ---
 
-## PACKAGE 8: Health Page (Backend Status)
+## PACKAGE 9: Health & System Page (full `/health` + `/config` integration)
 
-**Scope:** Display backend health status and operational metrics.
+**Scope:** Operational page combining backend health status, latency visualization, health recommendations, and a complete system-configuration view.
 
 **Deliverables:**
-- `frontend/src/pages/HealthPage.tsx` — page component:
-  - Loads `/health` endpoint on mount
-  - LoadingSpinner while fetching
-  - ErrorBanner if `/health` fails
-  - Renders backend status for each retriever (lexical, semantic, graph)
-  - Shows overall_status (healthy/degraded/unhealthy)
-  - Displays timestamp of last health check
-  - Optional: refresh button for manual re-check
-  - Optional: auto-refresh every 30 seconds
+- `frontend/src/pages/HealthPage.tsx`:
+  - Loads `/health` on mount; also loads `/config` once for the System Configuration card
+  - Overall status banner: "Healthy" green / "Degraded" amber / "Unhealthy" red, with check timestamp
+  - Per-backend cards from `backends{}` (rendered generically over keys so future backends appear automatically): healthy/unhealthy dot via LabelDot convention, `latency_ms` visualized with `LatencyBars`, `error_message` in red when present, per-backend check timestamp
+  - Health `recommendations[]` list below the cards
+  - Refresh button → `getHealth(true)` (`/health?force=true`, bypasses server TTL); optional auto-refresh every 30 s aligned to server TTL_SECONDS
+  - **System Configuration card** (from `/config`): backend_mode, sqlite_path (muted), embedding_model_name + svo_extractor_name + validator_name, enable_lm_judge / enable_lm_classifier as enabled/disabled chips, backend_status dots for lexical/semantic/graph, available_embedding_models / available_svo_extractors as counts with expandable lists
 
-**Entry Criteria:** Packages 1–5 complete; Package 2 complete; `/health` endpoint working
+**Entry Criteria:** Packages 1–6 complete; `/health` and `/config` working
 
-**Dependencies:** Packages 1–5, Package 2
+**Dependencies:** Packages 1–6
 
 **Downstream:** None (leaf feature)
 
 **Acceptance Tests:**
-1. Page loads, shows loading spinner
-2. After `/health` returns, spinner disappears, status renders
-3. Overall status displayed (green "Healthy", amber "Degraded", red "Unhealthy")
-4. Each backend shown with status, latency_ms, error_message
-5. Timestamp of health check displayed
-6. Refresh button triggers new `/health` call (optional)
-7. Auto-refresh works (optional)
+1. Page loads with spinner, then banner + backend cards render
+2. Banner color matches overall_status; timestamp displayed
+3. Each backend shows dot, latency bar scaled to max, error_message when unhealthy
+4. Recommendations list renders all strings; empty state handled
+5. Refresh triggers new call with `?force=true`; response timestamp changes even within 30 s of previous fetch
+6. Auto-refresh (if enabled) fires every 30 s
+7. Config card matches every field returned by GET /config; neo4j password never expected client-side
+8. Error states show ErrorBanner for both endpoints independently
 
-**Notes:** Label as "Backend Health", not "Cache Status". Simplest page; keep minimal. Use Card component for each backend status block.
+**Notes:** Two data sources, one page — keep the config card visually separate (own Card) from live health.
 
 ---
 
-## PACKAGE 9: Backend Mount Point Update
+## PACKAGE 10: Backend Mount Point Update
 
 **Scope:** Update FastAPI to serve Vite-built SPA instead of static frontend folder.
 
@@ -344,78 +308,66 @@ Use generic fallback renderer for unexpected nested objects. Handle label with n
   - To: `FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"`
 - Verify `if FRONTEND_DIR.exists()` check still passes
 
-**Entry Criteria:** Packages 1–8 complete and tested locally; `npm run build` succeeds and generates `frontend/dist/`
+**Entry Criteria:** Packages 1–9 complete and tested locally; `npm run build` generates `frontend/dist/`
 
-**Dependencies:** Packages 1–8 (SPA must be built first)
+**Dependencies:** Packages 1–9 (SPA must be built first)
 
 **Downstream:** None (final integration)
 
 **Acceptance Tests:**
 1. FastAPI starts without errors
-2. Navigating to `http://localhost:8000/` serves SPA's `index.html` from dist/
-3. SPA loads and fully functional (validate, feedback, health pages work)
+2. `http://localhost:8000/` serves SPA's `index.html` from dist/
+3. SPA fully functional (validate, feedback, health pages work through same origin)
 4. Refresh on `/feedback` and `/health` returns SPA's `index.html` (client-side routing)
-5. API endpoints (`/validate`, `/config`, `/health`, `/feedback/*`) still respond correctly
+5. API endpoints still respond correctly
 
-**Notes:** One-line code change. Confirm `frontend/dist/` exists before deploying; if missing, app fails to mount. Delete old `frontend/` static files (old `index.html`, `app.js`, `styles.css`) after verified.
+**Notes:** One-line code change. Confirm `frontend/dist/` exists before deploying. Delete old `frontend/` static files after verified.
 
 ---
 
-## PACKAGE 10: Build, Integration & Verification
+## PACKAGE 11: Build, Integration & Verification
 
-**Scope:** Execute full build pipeline, integrate SPA with FastAPI, run manual verification checklist for all 8 enhancements.
+**Scope:** Execute full build pipeline, integrate SPA with FastAPI, run manual verification checklist covering all enhancements and all charts/endpoints.
 
 **Deliverables:**
-- Confirm all prior packages complete (run TypeScript checks, linting if configured)
-- Run `cd frontend && npm run build`, verify `dist/` generated cleanly
-- Update `api/app.py` (Package 9) to serve `frontend/dist/`
+- Confirm Packages 1–10 complete (TypeScript checks pass)
+- `cd frontend && npm run build` → clean `dist/`
 - Start FastAPI: `uvicorn api.app:app --reload`
-- Run manual pass checklist:
-  1. Submit document + 2–3 triples (supported/contradicted/partial/unknown labels)
-  2. Verify every section renders:
-     - Retrieval pathway (including null case → "not retrieved")
-     - Annotated HTML with negation analysis
-     - Scoring breakdown with decision thresholds
-     - Rejected evidence (muted/struck-through styling)
-     - Temporal badges (test with Published date + assertion temporal_scope)
-     - Multi-modal chunk_types (doc with bullet list + HTML table)
-  3. Submit correction via inline form; verify POST `/feedback/correct` succeeds
-  4. Load `/feedback`, confirm confusion matrix reflects correction
-  5. Load `/health`, confirm backend statuses render
-  6. Trigger error banner (empty raw_text), verify dismissible behavior
+- Manual verification checklist:
+  1. Submit document + triples hitting each label; verify stat chips, label distribution chart, chunk-type histogram
+  2. Verify per-verdict rendering: pathway bars (incl. null case), annotated HTML + negation, scoring contribution bars ending at final_score, rejected evidence with inline score bars, temporal badges (Published date + temporal_scope doc), component-match icons
+  3. Submit correction via inline form; verify POST succeeds and "Correction recorded" appears
+  4. Load `/feedback`: donut band color matches system_accuracy; heatmap reflects the correction; most-common-error cell outlined; retriever bars match table values
+  5. Change day selector; confirm refetch and re-render
+  6. Load `/health`: banner, latency bars, recommendations; force-refresh changes timestamp within TTL window; System Configuration card matches GET /config exactly
+  7. Trigger error banner (empty raw_text) and verify dismiss behavior
+  8. Confirm lazy-loaded chunks load on first navigation to /feedback and /health
 
-**Entry Criteria:** Packages 1–9 complete; FastAPI running on 8000; test document data ready
+**Entry Criteria:** Packages 1–10 complete; FastAPI running on 8000; test document data ready
 
-**Dependencies:** Packages 1–9 (everything)
+**Dependencies:** All prior packages
 
 **Downstream:** None (final verification)
 
 **Acceptance Tests:**
-1. `npm run build` in `frontend/` succeeds, no TypeScript errors
-2. `dist/` exists with `index.html`, `assets/*.js`, `assets/*.css`
-3. FastAPI serves `/` → 200, returns SPA HTML
-4. `/validate` form submits, API succeeds, results render with all enhancements
-5. Retrieval pathway shows three columns (lexical/semantic/graph) with ranks/scores/reasons
-6. Annotated HTML renders safely (no script injection, HTML entities escaped)
-7. Negation badge shows if `negation_detected` true; keywords and scope visible
-8. Scoring breakdown shows all keys from `scoring_breakdown` dict
-9. Rejected evidence renders with visual distinction (muted/struck-through)
-10. Temporal badges: green "current", amber "outdated", hidden if null
-11. Component matches render as S/V/O icons (green checks, red crosses)
-12. Chunk types histogram renders above verdicts
-13. Correction form submits via POST, shows "Correction recorded"
-14. `/feedback` page loads, confusion matrix reflects correction
-15. `/health` page displays backend statuses
-16. Error banner appears on malformed requests, dismisses on click
+1. `npm run build` succeeds, no TypeScript errors; `dist/` contains index.html + assets
+2. FastAPI serves `/` → 200 SPA HTML
+3. Every chart renders real data with correct empty state when data absent
+4. Chart tooltips readable on dark theme
+5. All endpoint fields from the integration map visible somewhere in the UI
+6. Correction round-trip works end to end (form → analysis dashboard)
+7. No console errors during a full pass through all three pages
 
-**Notes:** Final integration and QA. If any enhancement fails, trace back to relevant package and debug. Document divergences from plan. Once all 10 checks pass, React SPA is production-ready.
+**Notes:** If any check fails, trace back to the owning package. Document divergences from plan.
 
 ---
 
 ## Critical Files for Implementation
 
-1. `frontend/package.json` — Project dependencies, scripts, configuration
-2. `frontend/src/api/client.ts` — API client wrapper (fetch + error normalization)
-3. `frontend/src/pages/ValidatePage.tsx` — Main validation workflow (largest, most complex)
-4. `frontend/src/components/validate/VerdictCard.tsx` — Single verdict display (orchestrates 8 enhancements)
-5. `api/app.py` — FastAPI mount point (single line change to `FRONTEND_DIR`)
+1. `frontend/package.json` — dependencies incl. recharts, scripts, configuration
+2. `frontend/src/api/client.ts` — fetch wrappers (5 endpoints, force-refresh support, error normalization)
+3. `frontend/src/api/types.ts` — exact interfaces for every response incl. typed feedback-analysis payloads
+4. `frontend/src/components/charts/` — shared visualization layer consumed by all pages
+5. `frontend/src/pages/ValidatePage.tsx` — main validation workflow (largest, most complex)
+6. `frontend/src/components/validate/VerdictCard.tsx` — single verdict display (orchestrates 8 enhancements)
+7. `api/app.py` — FastAPI mount point (single line change to FRONTEND_DIR)
