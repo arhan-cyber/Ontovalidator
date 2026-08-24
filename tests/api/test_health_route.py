@@ -26,7 +26,7 @@ def fake_report():
 def test_health_shape(client):
     health_route._cache = None
     with patch.object(health_route.HealthCheckRunner, "check_all", return_value=fake_report()) as mock_check:
-        resp = client.get("/health")
+        resp = client.get("/api/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["overall_status"] == "DEGRADED"
@@ -38,14 +38,14 @@ def test_health_shape(client):
 def test_health_cached_within_ttl(client):
     health_route._cache = None
     with patch.object(health_route.HealthCheckRunner, "check_all", return_value=fake_report()) as mock_check:
-        client.get("/health")
-        client.get("/health")
+        client.get("/api/health")
+        client.get("/api/health")
     assert mock_check.call_count == 1
 
 
 def test_health_force_bypasses_cache(client):
     health_route._cache = None
     with patch.object(health_route.HealthCheckRunner, "check_all", return_value=fake_report()) as mock_check:
-        client.get("/health")
-        client.get("/health?force=true")
+        client.get("/api/health")
+        client.get("/api/health?force=true")
     assert mock_check.call_count == 2
