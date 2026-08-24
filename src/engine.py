@@ -235,6 +235,10 @@ class SVOVerificationEngine:
             score = floor
         scoring_breakdown["final_score"] = score
 
+        if not self._feature_enabled("enable_scoring_breakdown"):
+            scoring_breakdown = None
+            decision_thresholds = None
+
         return TripleVerdict(
             assertion_id=assertion.assertion_id,
             subject=assertion.subject,

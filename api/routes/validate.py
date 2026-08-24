@@ -6,7 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
 
-from src.models import OntologyAssertion
+from src.models import OntologyAssertion, TemporalScope
 
 from .. import dependencies
 from ..schemas import ValidateRequest, ValidateResponse
@@ -32,6 +32,11 @@ async def validate(req: ValidateRequest):
             object=t.object,
             polarity=t.polarity,
             rule_type=t.rule_type,
+            temporal_scope=(
+                TemporalScope.from_dict(t.temporal_scope.model_dump())
+                if t.temporal_scope
+                else None
+            ),
         )
         for i, t in enumerate(req.triples, 1)
     ]

@@ -8,7 +8,7 @@ def test_ingestion_demo_runs(demo_db_path):
     from src.ingestion import run_demo as run_ingestion_demo
 
     result = run_ingestion_demo(db_path=demo_db_path)
-    assert result["status"] == "SUCCESS"
+    assert result["status"] == "success"
     assert "chunks" in result
     assert result["chunks"] > 0
 
@@ -37,7 +37,7 @@ def test_cross_chunk_reasoning(tmp_workspace):
         "The drug is also used to reduce fever and inflammation."
     )
     result = run_ingestion_demo(db_path=db_path, raw_text=document_text)
-    assert result["status"] == "SUCCESS"
+    assert result["status"] == "success"
 
     engine = SVOVerificationEngine(
         router=MoERouter(),
@@ -75,7 +75,7 @@ def test_long_text_and_svo_validation(tmp_workspace):
     )
 
     result = run_ingestion_demo(db_path=db_path, raw_text=document_text)
-    assert result["status"] == "SUCCESS"
+    assert result["status"] == "success"
 
     engine = SVOVerificationEngine(
         router=MoERouter(),
@@ -179,5 +179,13 @@ def test_chunk_store():
         )
         ingestor.ingest_document("test_doc", "This is a test chunk.")
 
-        chunks = store.get_chunks([])
+        import sqlite3
+
+        conn = sqlite3.connect(db_path)
+        try:
+            stored_ids = [row[0] for row in conn.execute("SELECT chunk_id FROM chunks")]
+        finally:
+            conn.close()
+
+        chunks = store.get_chunks(stored_ids)
         assert len(chunks) > 0

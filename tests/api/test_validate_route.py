@@ -16,7 +16,7 @@ def valid_payload(**overrides):
 
 
 def test_validate_happy_path(client, mock_engine):
-    resp = client.post("/validate", json=valid_payload())
+    resp = client.post("/api/validate", json=valid_payload())
     assert resp.status_code == 200
     body = resp.json()
     assert body["document_id"] == "doc_test"
@@ -33,7 +33,7 @@ def test_validate_happy_path(client, mock_engine):
 
 
 def test_validate_empty_raw_text(client):
-    resp = client.post("/validate", json=valid_payload(raw_text="   "))
+    resp = client.post("/api/validate", json=valid_payload(raw_text="   "))
     assert resp.status_code == 400
     assert resp.json() == {"error": {"error": "raw_text must not be empty"}}
 
@@ -41,20 +41,20 @@ def test_validate_empty_raw_text(client):
 def test_validate_empty_triples(client):
     payload = valid_payload()
     payload["triples"] = []
-    resp = client.post("/validate", json=payload)
+    resp = client.post("/api/validate", json=payload)
     assert resp.status_code == 422  # min_length=1 rejected by pydantic before handler logic
 
 
 def test_validate_triple_missing_fields(client):
     payload = valid_payload()
     payload["triples"] = [{"subject": "a"}]
-    resp = client.post("/validate", json=payload)
+    resp = client.post("/api/validate", json=payload)
     assert resp.status_code == 422
 
 
 def test_validate_engine_raises(client, mock_engine):
     mock_engine.validate_triples_batch.side_effect = RuntimeError("boom")
-    resp = client.post("/validate", json=valid_payload())
+    resp = client.post("/api/validate", json=valid_payload())
     assert resp.status_code == 500
     body = resp.json()
     assert body["error"]["error"] == "validation_failed"
@@ -66,7 +66,7 @@ def test_validate_model_override_selects_pooled_engine(client, stub_engine_pool)
     transformer_engine.validate_triples_batch.return_value = canned_result(document_id="doc_transformer")
 
     resp = client.post(
-        "/validate",
+        "/api/validate",
         json=valid_payload(embedding_model="transformer", svo_extractor="mock"),
     )
     assert resp.status_code == 200
@@ -83,7 +83,7 @@ def test_validate_default_id_generation(client, mock_engine):
         {"subject": "engine", "relation": "drives", "object": "wheel"},
         {"subject": "wheel", "relation": "stops", "object": "car"},
     ]
-    client.post("/validate", json=payload)
+    client.post("/api/validate", json=payload)
     call_kwargs = mock_engine.validate_triples_batch.call_args.kwargs
     assert call_kwargs["document_id"].startswith("doc_")
     assert [t.assertion_id for t in call_kwargs["triples"]] == ["t1", "t2"]
