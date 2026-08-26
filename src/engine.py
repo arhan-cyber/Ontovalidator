@@ -810,6 +810,121 @@ class SVOVerificationEngine:
             "backend_status": self.get_backend_status(),
         }
 
+    # Sentinel document id for verdicts adjudicated against the whole corpus
+    # rather than one document. Keeps corpus verdicts in their own cache
+    # namespace so they never collide with single-document ones.
+    CORPUS_DOCUMENT_ID = "__corpus__"
+
+    def corpus_fingerprint(self) -> str:
+        """Digest of what is currently ingested, for corpus verdict caching.
+
+        `validate_triples_batch` keys its cache on a hash of the raw document
+        text, which corpus mode has no equivalent of - the corpus is whatever
+        happens to be in the chunk store. Digesting the (document_id, chunk
+        count) pairs gives the same invalidation property: ingest another
+        document, or re-ingest a changed one, and cached verdicts stop
+        matching instead of being replayed against a corpus that moved.
+        """
+        from .cache.cache_engine import CacheEngine
+
+        if not isinstance(self.chunk_store, SQLiteChunkStore):
+            return "unknown_corpus"
+        conn = _connect(
+            self.chunk_store.db_path,
+            timeout_s=(self.config.sqlite_busy_timeout_s if self.config else 30.0),
+        )
+        try:
+            rows = conn.execute(
+                "SELECT document_id, COUNT(*) FROM chunks GROUP BY document_id ORDER BY document_id"
+            ).fetchall()
+        finally:
+            conn.close()
+        return CacheEngine.fingerprint(*[f"{doc}:{count}" for doc, count in rows])
+
+    def validate_assertions_corpus(
+        self,
+        assertions: List[OntologyAssertion],
+        top_k: int = 5,
+        progress_callback: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Adjudicate assertions against every ingested document at once.
+
+        `validate_triples_batch` couples one ingest to one document, which the
+        ontology plane can't use: its claims are spread across a corpus of
+        process manuals, and a single claim may only be evidenced in one of
+        them. This runs the same per-assertion adjudication with retrieval
+        left unscoped.
+
+        **Scoping is by ingest, not by argument.** The retrievers filter on a
+        single `document_id` or none at all (see `SQLiteLexicalRetriever._retrieve_impl`),
+        so there is no way to search a *subset* of documents. To control the
+        corpus, ingest only what you want in it - which is exactly what the
+        `include_it4it_corpus` flag is for.
+
+        `progress_callback(index, total, assertion_id)` is invoked before each
+        adjudication; a few hundred ontology claims against transformer models
+        is a long enough run that a silent one is unusable.
+        """
+        fingerprint = self.corpus_fingerprint()
+        verdicts: List[Dict[str, Any]] = []
+        cache_hits = 0
+        errors = 0
+        total = len(assertions)
+
+        for index, assertion in enumerate(assertions, start=1):
+            if progress_callback is not None:
+                try:
+                    progress_callback(index, total, assertion.assertion_id)
+                except Exception:
+                    # A broken progress reporter must not abort the run.
+                    logger.debug("progress callback raised", exc_info=True)
+
+            cached = self._cached_verdict(
+                assertion.assertion_id, self.CORPUS_DOCUMENT_ID, fingerprint
+            )
+            if cached is not None:
+                cache_hits += 1
+                verdicts.append(cached)
+                continue
+
+            try:
+                verdict = self.adjudicate_triple(
+                    document_text=None,
+                    assertion=assertion,
+                    document_id=None,  # unscoped: search the whole corpus
+                    top_k=top_k,
+                )
+                verdict_dict = self._serialize_verdict(verdict)
+                self._store_verdict(
+                    verdict, verdict_dict, self.CORPUS_DOCUMENT_ID, fingerprint
+                )
+            except Exception:
+                logger.exception(
+                    "corpus adjudication failed for assertion %s", assertion.assertion_id
+                )
+                verdict_dict = self._build_error_verdict(assertion)
+                errors += 1
+            verdicts.append(verdict_dict)
+
+        return {
+            "document_id": self.CORPUS_DOCUMENT_ID,
+            "corpus_fingerprint": fingerprint,
+            "verdicts": verdicts,
+            "summary": {
+                "total_triples": total,
+                "supported": sum(1 for v in verdicts if v["label"] == "supported"),
+                "contradicted": sum(1 for v in verdicts if v["label"] == "contradicted"),
+                "partial": sum(1 for v in verdicts if v["label"] == "partial"),
+                "unknown": sum(1 for v in verdicts if v["label"] == "unknown"),
+                "avg_score": (
+                    sum(v["score"] for v in verdicts) / len(verdicts) if verdicts else 0.0
+                ),
+                "cache_hits": cache_hits,
+                "errors": errors,
+            },
+            "backend_status": self.get_backend_status(),
+        }
+
     @staticmethod
     def _document_fingerprint(raw_text: str) -> str:
         from .cache.cache_engine import CacheEngine
