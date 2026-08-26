@@ -129,6 +129,10 @@ class PipelineConfig:
     enable_feedback: bool = True
     feedback_db_path: str = "feedback.db"
 
+    # Ontology conflict registry (meta-model-vs-ontology adjudication queue)
+    enable_conflict_registry: bool = True
+    conflict_db_path: str = "conflicts.db"
+
     # Observability payloads on verdicts
     enable_retrieval_pathway: bool = True
     enable_chunk_annotation: bool = True
@@ -149,7 +153,11 @@ class PipelineConfig:
         cache.db and feedback.db into the current working directory.
         """
         directory = os.path.dirname(os.path.abspath(self.sqlite_path))
-        for field_name, default in (("cache_db_path", "cache.db"), ("feedback_db_path", "feedback.db")):
+        for field_name, default in (
+            ("cache_db_path", "cache.db"),
+            ("feedback_db_path", "feedback.db"),
+            ("conflict_db_path", "conflicts.db"),
+        ):
             if getattr(self, field_name) == default:
                 setattr(self, field_name, os.path.join(directory, default))
 
@@ -194,6 +202,8 @@ class PipelineConfig:
             "default_temporal_scope_years": self.default_temporal_scope_years,
             "enable_feedback": self.enable_feedback,
             "feedback_db_path": self.feedback_db_path,
+            "enable_conflict_registry": self.enable_conflict_registry,
+            "conflict_db_path": self.conflict_db_path,
             "enable_retrieval_pathway": self.enable_retrieval_pathway,
             "enable_chunk_annotation": self.enable_chunk_annotation,
             "enable_scoring_breakdown": self.enable_scoring_breakdown,
@@ -320,6 +330,10 @@ class PipelineConfig:
         # Feedback loop
         config.enable_feedback = _env_bool("ONTO_ENABLE_FEEDBACK", "true")
         config.feedback_db_path = os.getenv("ONTO_FEEDBACK_DB_PATH", "feedback.db")
+
+        # Ontology conflict registry
+        config.enable_conflict_registry = _env_bool("ONTO_ENABLE_CONFLICT_REGISTRY", "true")
+        config.conflict_db_path = os.getenv("ONTO_CONFLICT_DB_PATH", "conflicts.db")
 
         # Observability payloads
         config.enable_retrieval_pathway = _env_bool("ONTO_ENABLE_RETRIEVAL_PATHWAY", "true")
