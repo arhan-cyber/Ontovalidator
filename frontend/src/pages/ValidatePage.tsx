@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 
 import { ApiError, validate } from "../api/client";
 import type { ValidateRequest, ValidateResponse } from "../api/types";
+import { DetailLevelToggle } from "../components/shared/DetailLevelToggle";
 import { ErrorBanner } from "../components/shared/ErrorBanner";
 import { LoadingSpinner } from "../components/shared/LoadingSpinner";
 import { DocumentForm } from "../components/validate/DocumentForm";
@@ -30,6 +31,10 @@ export default function ValidatePage() {
   return (
     <>
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
+      <div className="detail-level-row">
+        <span className="detail-level-label">Trace detail</span>
+        <DetailLevelToggle />
+      </div>
       <DocumentForm onSubmit={runValidation} submitting={submitting} />
 
       {submitting ? <LoadingSpinner message="Validating triples…" /> : null}

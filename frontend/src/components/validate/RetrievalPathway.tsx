@@ -1,4 +1,5 @@
 import type { RetrievalPathway } from "../../api/types";
+import { detailAtLeast, useDetailLevel } from "../../context/DetailLevelContext";
 import { FusionGauge, PathwayMiniBars } from "../charts";
 
 interface RetrievalPathwayViewProps {
@@ -8,6 +9,8 @@ interface RetrievalPathwayViewProps {
 const RETRIEVERS = ["lexical", "semantic", "graph"] as const;
 
 export function RetrievalPathwayView({ pathway }: RetrievalPathwayViewProps) {
+  const { level } = useDetailLevel();
+  const showReasons = detailAtLeast(level, "trace");
   if (!pathway) return null;
 
   return (
@@ -23,7 +26,7 @@ export function RetrievalPathwayView({ pathway }: RetrievalPathwayViewProps) {
               <>
                 <div>rank: {r.rank ?? "—"}</div>
                 <div>score: {r.score ?? "—"}</div>
-                <div style={{ fontSize: "0.74rem" }}>{r.reason}</div>
+                {showReasons ? <div style={{ fontSize: "0.74rem" }}>{r.reason}</div> : null}
               </>
             ) : (
               <span className="not-retrieved">not retrieved</span>

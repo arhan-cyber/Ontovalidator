@@ -46,8 +46,8 @@ export interface RetrievalPathway {
 
 export interface NegationAnalysis {
   negation_detected?: boolean;
-  keywords?: string[];
-  scope?: string;
+  negation_keywords?: string[];
+  negation_scope?: string[];
   [key: string]: unknown;
 }
 
@@ -100,6 +100,7 @@ export interface SummaryOut {
   unknown: number;
   avg_score: number;
   cache_hits: number;
+  errors: number;
 }
 
 export interface BackendStatusOut {

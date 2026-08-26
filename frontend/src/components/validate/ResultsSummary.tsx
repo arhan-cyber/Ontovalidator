@@ -35,6 +35,11 @@ export function ResultsSummary({ result }: ResultsSummaryProps) {
         <span>
           cache hits: <strong>{summary.cache_hits}</strong>
         </span>
+        {summary.errors > 0 && (
+          <span className="badge badge-outdated" title="Triples whose adjudication failed server-side; see logs.">
+            errors: <strong>{summary.errors}</strong>
+          </span>
+        )}
       </div>
 
       <div className="charts-row">

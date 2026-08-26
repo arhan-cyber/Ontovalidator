@@ -4,3 +4,4 @@ export { LabelDot } from "./LabelDot";
 export { ErrorBanner } from "./ErrorBanner";
 export { LoadingSpinner } from "./LoadingSpinner";
 export { StatChip } from "./StatChip";
+export { DetailLevelToggle } from "./DetailLevelToggle";

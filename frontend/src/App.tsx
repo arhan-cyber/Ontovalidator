@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 
 import { LoadingSpinner } from "./components/shared";
+import { DetailLevelProvider } from "./context/DetailLevelContext";
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 const ValidatePage = lazy(() => import("./pages/ValidatePage"));
@@ -10,7 +11,7 @@ const HealthPage = lazy(() => import("./pages/HealthPage"));
 
 export default function App() {
   return (
-    <>
+    <DetailLevelProvider>
       <header className="topbar">
         <h1>SVO Triple Verifier</h1>
         <nav className="nav">
@@ -38,6 +39,6 @@ export default function App() {
           </Suspense>
         </RouteErrorBoundary>
       </main>
-    </>
+    </DetailLevelProvider>
   );
 }

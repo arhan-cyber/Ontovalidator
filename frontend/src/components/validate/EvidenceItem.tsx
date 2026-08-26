@@ -1,4 +1,5 @@
 import type { EvidenceOut } from "../../api/types";
+import { detailAtLeast, useDetailLevel } from "../../context/DetailLevelContext";
 import { RetrievalPathwayView } from "./RetrievalPathway";
 
 interface EvidenceItemProps {
@@ -26,7 +27,7 @@ function NegationBadge({ evidence }: { evidence: EvidenceOut }) {
   return (
     <span
       className="badge badge-negation"
-      title={`keywords: ${(neg.keywords ?? []).join(", ") || "—"} · scope: ${neg.scope ?? "—"}`}
+      title={`keywords: ${(neg.negation_keywords ?? []).join(", ") || "—"} · scope: ${(neg.negation_scope ?? []).join(", ") || "—"}`}
     >
       negation detected
     </span>
@@ -34,8 +35,9 @@ function NegationBadge({ evidence }: { evidence: EvidenceOut }) {
 }
 
 function ComponentMatches({ evidence }: { evidence: EvidenceOut }) {
+  const { level } = useDetailLevel();
   const m = evidence.component_matches;
-  if (!m) return null;
+  if (!m || !detailAtLeast(level, "detailed")) return null;
   return (
     <span className="component-match" title="component matches">
       {(["subject", "relation", "object"] as const).map((part) => (
@@ -49,10 +51,15 @@ function ComponentMatches({ evidence }: { evidence: EvidenceOut }) {
 }
 
 export function EvidenceItem({ evidence }: EvidenceItemProps) {
+  const { level } = useDetailLevel();
+  const showAnnotatedHtml = detailAtLeast(level, "trace") && evidence.annotated_html;
+  const showPathway = detailAtLeast(level, "detailed");
+  const showRawFooter = detailAtLeast(level, "trace");
+
   return (
     <div className="evidence-item">
-      {evidence.annotated_html ? (
-        <div dangerouslySetInnerHTML={{ __html: evidence.annotated_html }} />
+      {showAnnotatedHtml ? (
+        <div dangerouslySetInnerHTML={{ __html: evidence.annotated_html as string }} />
       ) : (
         <div>{evidence.text}</div>
       )}
@@ -61,11 +68,13 @@ export function EvidenceItem({ evidence }: EvidenceItemProps) {
         <ComponentMatches evidence={evidence} />
         <TemporalBadge evidence={evidence} />
       </div>
-      <RetrievalPathwayView pathway={evidence.retrieval_pathway} />
-      <div style={{ fontSize: "0.74rem", color: "var(--gray)", marginTop: "0.3rem" }}>
-        chunk {evidence.chunk_id} · source: {evidence.source} · confidence{" "}
-        {evidence.confidence} · match: {evidence.match_type}
-      </div>
+      {showPathway ? <RetrievalPathwayView pathway={evidence.retrieval_pathway} /> : null}
+      {showRawFooter ? (
+        <div style={{ fontSize: "0.74rem", color: "var(--gray)", marginTop: "0.3rem" }}>
+          chunk {evidence.chunk_id} · source: {evidence.source} · confidence{" "}
+          {evidence.confidence} · match: {evidence.match_type}
+        </div>
+      ) : null}
     </div>
   );
 }

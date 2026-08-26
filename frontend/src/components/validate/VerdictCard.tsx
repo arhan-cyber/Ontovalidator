@@ -1,4 +1,5 @@
 import type { VerdictOut } from "../../api/types";
+import { detailAtLeast, useDetailLevel } from "../../context/DetailLevelContext";
 import { LabelDot } from "../shared/LabelDot";
 import { EvidenceItem } from "./EvidenceItem";
 import { FeedbackCorrectionForm } from "./FeedbackCorrectionForm";
@@ -11,6 +12,13 @@ interface VerdictCardProps {
 }
 
 export function VerdictCard({ verdict, documentId }: VerdictCardProps) {
+  const { level } = useDetailLevel();
+  const showEvidence = detailAtLeast(level, "summary");
+  const showRuleHits = detailAtLeast(level, "summary");
+  const showRejected = detailAtLeast(level, "detailed");
+  const showScoring = detailAtLeast(level, "detailed");
+  const showRawTrace = detailAtLeast(level, "trace");
+
   return (
     <article className="verdict-card">
       <div className="verdict-title">
@@ -23,26 +31,34 @@ export function VerdictCard({ verdict, documentId }: VerdictCardProps) {
 
       <p className="rationale">{verdict.rationale}</p>
 
-      {verdict.rule_hits.length > 0 ? (
+      {showRuleHits && verdict.rule_hits.length > 0 ? (
         <div style={{ fontSize: "0.74rem", color: "var(--gray)", marginBottom: "0.4rem" }}>
           rules: {verdict.rule_hits.join(", ")} · sources:{" "}
           {verdict.retrieval_sources.join(", ") || "none"}
         </div>
       ) : null}
 
-      <details open={verdict.evidence.length > 0}>
-        <summary>Evidence ({verdict.evidence.length})</summary>
-        <div style={{ paddingTop: "0.4rem" }}>
-          {verdict.evidence.length === 0 ? (
-            <p className="hm-empty">No supporting evidence retrieved.</p>
-          ) : (
-            verdict.evidence.map((ev) => <EvidenceItem key={ev.chunk_id} evidence={ev} />)
-          )}
-        </div>
-      </details>
+      {showEvidence ? (
+        <details open={verdict.evidence.length > 0}>
+          <summary>Evidence ({verdict.evidence.length})</summary>
+          <div style={{ paddingTop: "0.4rem" }}>
+            {verdict.evidence.length === 0 ? (
+              <p className="hm-empty">No supporting evidence retrieved.</p>
+            ) : (
+              verdict.evidence.map((ev) => <EvidenceItem key={ev.chunk_id} evidence={ev} />)
+            )}
+          </div>
+        </details>
+      ) : null}
 
-      <RejectedEvidenceList rejected={verdict.rejected_evidence} />
-      <ScoringBreakdown verdict={verdict} />
+      {showRejected ? <RejectedEvidenceList rejected={verdict.rejected_evidence} /> : null}
+      {showScoring ? <ScoringBreakdown verdict={verdict} /> : null}
+      {showRawTrace ? (
+        <details>
+          <summary>Raw verdict JSON</summary>
+          <pre className="raw-trace">{JSON.stringify(verdict, null, 2)}</pre>
+        </details>
+      ) : null}
       <FeedbackCorrectionForm verdict={verdict} documentId={documentId} />
     </article>
   );
