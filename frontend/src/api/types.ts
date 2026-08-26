@@ -206,3 +206,147 @@ export interface ConfigResponse {
   available_embedding_models: string[];
   available_svo_extractors: string[];
 }
+
+// --- Ontology compliance ---------------------------------------------------
+
+export type Severity = "error" | "warning" | "info";
+export type ConflictStatus =
+  | "open"
+  | "ontology_defect"
+  | "metamodel_gap"
+  | "accepted_exception";
+
+export interface ConformanceFinding {
+  rule_id: string;
+  severity: Severity;
+  subject_kind: "node" | "edge" | "graph";
+  subject_id: string;
+  message: string;
+  evidence: string | null;
+  remediation: string | null;
+  degraded: boolean;
+  degraded_reason: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface GroundingRollup {
+  status: "supported" | "partial" | "contradicted" | "unknown";
+  supported: number;
+  partial: number;
+  contradicted: number;
+  unknown: number;
+  total: number;
+  assertion_ids: string[];
+}
+
+export interface VocabularyGap {
+  measured: boolean;
+  terms_total?: number;
+  terms_present?: number;
+  terms_absent?: number;
+  present_pct?: number;
+  absent_terms?: string[];
+}
+
+export interface OntologyReport {
+  passed: boolean;
+  ontology_version: string;
+  metamodel_version: string;
+  ontology_path: string | null;
+  metamodel_path: string | null;
+  conformance: {
+    passed: boolean;
+    by_severity: Record<Severity, number>;
+    by_rule: Record<string, number>;
+    unreviewed_conflicts: number;
+    findings: ConformanceFinding[];
+  };
+  grounding: {
+    ran: boolean;
+    passed: boolean;
+    /** "low" on the SQLite demo tier: `supported` is unreachable there. */
+    confidence: "not_run" | "low" | "normal";
+    retrieval_backends: Record<string, string>;
+    corpus_documents: string[];
+    corpus_fingerprint: string | null;
+    by_label: Record<string, number>;
+    coverage: {
+      nodes_total: number;
+      nodes_with_evidence: number;
+      nodes_pct: number;
+      edges_total: number;
+      edges_with_evidence: number;
+      edges_pct: number;
+    };
+    vocabulary_gap: VocabularyGap;
+    contradictions: Array<Record<string, unknown>>;
+    node_grounding: Record<string, GroundingRollup>;
+    edge_grounding: Record<string, GroundingRollup>;
+  };
+  node_status: Record<
+    string,
+    { conformance: "pass" | "fail"; failed_rules: string[]; grounding: string }
+  >;
+}
+
+export interface OntologyValidateRequest {
+  plane?: "a" | "b" | "both";
+  severity_threshold?: Severity;
+  include_it4it?: boolean;
+  top_k?: number;
+  claim_kinds?: string[];
+}
+
+export interface OntologyNode {
+  id: string;
+  meta_class: string;
+  types: string[];
+  description: string;
+  next_pointer: string[];
+}
+
+export interface OntologyEdge {
+  source: string;
+  target: string;
+  type: string;
+  key: string;
+}
+
+export interface OntologyGraphResponse {
+  version: string;
+  nodes: OntologyNode[];
+  edges: OntologyEdge[];
+}
+
+export interface Conflict {
+  conflict_id: string;
+  first_seen: string;
+  last_seen: string;
+  rule_id: string;
+  subject_kind: string;
+  subject_id: string;
+  ontology_says: string;
+  metamodel_says: string;
+  status: ConflictStatus;
+  resolution_note: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  occurrences: number;
+}
+
+export interface ConflictsResponse {
+  conflicts: Conflict[];
+  unreviewed: number;
+}
+
+export interface Amendment {
+  conflict_id: string;
+  rule_id: string;
+  subject_id: string;
+  field: string | null;
+  add_value: string;
+  changes: Array<{ field: string; add_values: string[]; current_values: string[] }>;
+  metamodel_says: string;
+  ontology_says: string;
+  resolution_note: string | null;
+}

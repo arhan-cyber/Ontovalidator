@@ -1,9 +1,16 @@
 import type {
+  Amendment,
   ConfigResponse,
+  Conflict,
+  ConflictStatus,
+  ConflictsResponse,
   CorrectionRequest,
   CorrectionResponse,
   FeedbackAnalysisResponse,
   HealthResponse,
+  OntologyGraphResponse,
+  OntologyReport,
+  OntologyValidateRequest,
   ValidateRequest,
   ValidateResponse,
 } from "./types";
@@ -94,4 +101,37 @@ export async function getFeedbackAnalysis(
   return request<FeedbackAnalysisResponse>(
     `/api/feedback/analysis?days=${encodeURIComponent(days)}`,
   );
+}
+
+// --- Ontology compliance ---------------------------------------------------
+
+export async function validateOntology(
+  req: OntologyValidateRequest = {},
+): Promise<OntologyReport> {
+  return request<OntologyReport>("/api/ontology/validate", jsonInit("POST", req));
+}
+
+export async function getOntologyGraph(): Promise<OntologyGraphResponse> {
+  return request<OntologyGraphResponse>("/api/ontology/graph");
+}
+
+export async function getConflicts(status?: ConflictStatus): Promise<ConflictsResponse> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<ConflictsResponse>(`/api/ontology/conflicts${query}`);
+}
+
+export async function resolveConflict(
+  conflictId: string,
+  status: ConflictStatus,
+  note?: string,
+  resolvedBy?: string,
+): Promise<Conflict> {
+  return request<Conflict>(
+    `/api/ontology/conflicts/${encodeURIComponent(conflictId)}/resolve`,
+    jsonInit("POST", { status, note: note ?? null, resolved_by: resolvedBy ?? null }),
+  );
+}
+
+export async function getAmendments(): Promise<{ amendments: Amendment[] }> {
+  return request<{ amendments: Amendment[] }>("/api/ontology/amendments");
 }

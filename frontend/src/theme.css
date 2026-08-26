@@ -441,3 +441,134 @@ details summary { cursor: pointer; font-size: 0.85rem; color: var(--accent); }
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* --- Ontology compliance page --------------------------------------------- */
+
+.plane-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.verdict-pass { color: var(--ok, #2e7d52); font-weight: 700; }
+.verdict-fail { color: var(--bad, #c2453f); font-weight: 700; }
+.verdict-skip { color: var(--muted, #7a8290); font-weight: 700; }
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 0.85rem;
+}
+
+.filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted, #7a8290);
+}
+
+.filter-row label.checkbox,
+label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.findings-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.findings-table th,
+.findings-table td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+  vertical-align: top;
+}
+.findings-table th { font-size: 0.72rem; text-transform: uppercase; color: var(--muted, #7a8290); }
+
+.sev {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.sev-error   { background: rgba(194, 69, 63, 0.18); color: #e07a74; }
+.sev-warning { background: rgba(205, 154, 61, 0.18); color: #d3a55c; }
+.sev-info    { background: rgba(90, 138, 200, 0.18); color: #7fa8dc; }
+
+.badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  background: var(--surface-2, #232833);
+  color: var(--muted, #7a8290);
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+.mono.strong { font-weight: 700; }
+.small { font-size: 0.75rem; }
+
+.callout {
+  padding: 0.65rem 0.85rem;
+  border-radius: 5px;
+  margin-bottom: 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.callout-warn {
+  background: rgba(205, 154, 61, 0.12);
+  border-left: 3px solid #cd9a3d;
+}
+
+.conflict-list { list-style: none; padding: 0; margin: 0; }
+.conflict {
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 5px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.conflict-head { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.conflict-detail {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.2rem 0.6rem;
+  margin: 0.5rem 0;
+  font-size: 0.78rem;
+}
+.conflict-detail dt { color: var(--muted, #7a8290); }
+.conflict-detail dd { margin: 0; }
+.conflict input[type="text"] { width: 100%; margin-bottom: 0.5rem; }
+.conflict-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.node-group { margin-bottom: 1rem; }
+.node-list { list-style: none; padding: 0; margin: 0; }
+.node-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.22rem 0.4rem;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+}
+.node-axes { display: flex; gap: 0.35rem; }
+
+.axis {
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+.axis-pass         { background: rgba(46, 125, 82, 0.18);  color: #6cbf8f; }
+.axis-fail         { background: rgba(194, 69, 63, 0.18);  color: #e07a74; }
+.axis-supported    { background: rgba(46, 125, 82, 0.18);  color: #6cbf8f; }
+.axis-contradicted { background: rgba(194, 69, 63, 0.18);  color: #e07a74; }
+.axis-partial      { background: rgba(205, 154, 61, 0.18); color: #d3a55c; }
+.axis-unknown      { background: var(--surface-2, #232833); color: var(--muted, #7a8290); }
+
+.contradiction-list { list-style: none; padding: 0; margin: 0.4rem 0 0; }
+.contradiction-list li { padding: 0.15rem 0; }
