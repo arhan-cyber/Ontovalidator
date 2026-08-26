@@ -5,6 +5,7 @@ from .table_extractor import TableExtractor
 from .list_extractor import ListExtractor
 from .image_extractor import ImageExtractor
 from .temporal_extractor import TemporalExtractor
+from .pdf_extractor import PDFExtractor, PDFExtractionError, HeadingStack, PDFDocument, PDFSegment, PDFTable
 
 __all__ = [
     "DataIngestor",
@@ -17,6 +18,12 @@ __all__ = [
     "ListExtractor",
     "ImageExtractor",
     "TemporalExtractor",
+    "PDFExtractor",
+    "PDFExtractionError",
+    "HeadingStack",
+    "PDFDocument",
+    "PDFSegment",
+    "PDFTable",
     "LocalElasticsearchClient",
     "LocalMilvusCollection",
     "LocalNeo4jDriver",

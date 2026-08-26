@@ -1,9 +1,12 @@
 """Document ingestion and processing pipeline."""
 
+import glob
+import os
+import re
 import uuid
 import json
 import sqlite3
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from ..models import Chunk, ChunkType, SVORelation
 from ..storage.chunk_store import ensure_chunks_schema
@@ -15,6 +18,7 @@ from .list_extractor import ListExtractor
 from .table_extractor import TableExtractor
 from .image_extractor import ImageExtractor
 from .temporal_extractor import TemporalExtractor
+from .pdf_extractor import PDFExtractor, PDFExtractionError
 
 
 class LocalElasticsearchClient:
@@ -74,6 +78,7 @@ class DataIngestor:
         list_extractor=None,
         image_extractor=None,
         temporal_extractor=None,
+        pdf_extractor=None,
     ):
         self.sqlite_path = sqlite_conn_path
         self.es_client = es_client
@@ -94,6 +99,7 @@ class DataIngestor:
             min_confidence=getattr(config, "min_ocr_confidence", 0.5)
         )
         self.temporal_extractor = temporal_extractor or TemporalExtractor()
+        self.pdf_extractor = pdf_extractor or PDFExtractor()
 
         if config and config.verbose:
             print(f"DataIngestor initialized with config: backend_mode={config.backend_mode.value}")
@@ -210,9 +216,216 @@ class DataIngestor:
         chunks.extend(modal_chunks)
         print(f"  -> Generated {len(chunks)} chunks ({len(modal_chunks)} non-text).")
 
+        return self._finish_ingestion(document_id, chunks, temporal_source_text=raw_text)
+
+    def ingest_pdf(
+        self,
+        document_id: str,
+        path: str,
+        page_range: Optional[Tuple[int, int]] = None,
+    ) -> Dict[str, Any]:
+        """Ingest a PDF file: extract → chunk → embed → extract → store.
+
+        Reuses the exact same tail of the pipeline as `ingest_document`
+        (temporal metadata, embeddings, SVO/concept extraction, and the
+        four store writers) via `_finish_ingestion`; only chunk *building*
+        differs, since a PDF's chunks carry page/section provenance that a
+        plain string never has.
+
+        `page_range` is a 1-indexed, inclusive `(start, end)` tuple, mainly
+        for the 294-page IT4IT standard where callers want a slice rather
+        than the whole document.
+        """
+        print(f"Starting PDF ingestion for Document: {document_id} ({path})")
+
+        try:
+            pdf_doc = self.pdf_extractor.extract(path, page_range=page_range)
+        except PDFExtractionError as exc:
+            print(f"  [!] PDF extraction failed: {exc}")
+            return {
+                "status": "error",
+                "document_id": document_id,
+                "error": str(exc),
+            }
+
+        chunks = self._build_pdf_chunks(document_id, pdf_doc)
+        print(f"  -> Generated {len(chunks)} chunks from {len(pdf_doc.segments)} page segments "
+              f"and {len(pdf_doc.tables)} tables.")
+
+        temporal_source_text = "\n".join(segment.text for segment in pdf_doc.segments[:5])
+        return self._finish_ingestion(document_id, chunks, temporal_source_text=temporal_source_text)
+
+    def ingest_corpus(
+        self,
+        directory: str,
+        include_patterns: Optional[List[str]] = None,
+        exclude_patterns: Optional[List[str]] = None,
+        page_range: Optional[Tuple[int, int]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Ingest every PDF in `directory`, one `document_id` per file.
+
+        `include_patterns`/`exclude_patterns` are glob patterns (matched
+        against the basename, e.g. `["*.pdf"]`); default is every `*.pdf`.
+        `document_id` is derived from the filename via `_slugify_filename`,
+        so re-ingesting the same directory reuses the same ids (needed for
+        `_write_sqlite`'s replace-on-reingest semantics).
+        """
+        include_patterns = include_patterns or ["*.pdf"]
+        paths = sorted(self._list_corpus_files(directory, include_patterns, exclude_patterns))
+
+        results = []
+        for path in paths:
+            document_id = self._slugify_filename(path)
+            result = self.ingest_pdf(document_id, path, page_range=page_range)
+            results.append(result)
+        return results
+
+    @staticmethod
+    def _list_corpus_files(
+        directory: str,
+        include_patterns: List[str],
+        exclude_patterns: Optional[List[str]],
+    ) -> List[str]:
+        matched = set()
+        for pattern in include_patterns:
+            matched.update(glob.glob(os.path.join(directory, pattern)))
+
+        if exclude_patterns:
+            excluded = set()
+            for pattern in exclude_patterns:
+                excluded.update(glob.glob(os.path.join(directory, pattern)))
+            matched -= excluded
+
+        return [path for path in matched if os.path.isfile(path)]
+
+    @staticmethod
+    def _slugify_filename(path: str) -> str:
+        """A stable, filesystem-independent document_id derived from a filename.
+
+        Lowercases, strips the extension, and replaces every run of
+        non-alphanumeric characters with a single underscore, so the same
+        file always yields the same id (needed for `ingest_pdf` re-runs to
+        replace rather than duplicate a document's chunks).
+        """
+        base = os.path.splitext(os.path.basename(path))[0]
+        slug = re.sub(r"[^a-zA-Z0-9]+", "_", base).strip("_").lower()
+        return slug or "document"
+
+    # A run of dots (with or without spaces between them) is a table-of-contents
+    # dot leader: pure visual formatting, never content. Left alone, the shared
+    # sentence splitter reads each ". " as its own sentence - four pages of the
+    # IT4IT front matter produced 8,536 "sentences" of which 8,376 were the
+    # two-character string " .". Those become real rows in the chunk store and
+    # real candidates in every retriever, so a document is mostly noise before
+    # anything has a chance to rank it.
+    _DOT_LEADER = re.compile(r"(?:\.\s*){3,}")
+    # Page furniture that repeats on every page and carries no claim.
+    _PAGE_FURNITURE = re.compile(r"^\s*(?:Evaluation Copy|Confidential|Page \d+(?: of \d+)?)\s*$",
+                                 re.IGNORECASE | re.MULTILINE)
+
+    @classmethod
+    def _clean_pdf_text(cls, text: str) -> str:
+        """Strip layout artefacts before the text reaches the sentence splitter."""
+        text = cls._PAGE_FURNITURE.sub(" ", text)
+        text = cls._DOT_LEADER.sub(" ", text)
+        return text
+
+    @staticmethod
+    def _is_substantive(text: str) -> bool:
+        """Whether a chunk carries enough content to be worth indexing.
+
+        Deliberately generous: two real words is a low bar, and the point is
+        only to drop fragments that cannot possibly be evidence for anything -
+        stray punctuation, page numbers, single stray letters.
+        """
+        words = [w for w in re.findall(r"[A-Za-z0-9]+", text) if len(w) > 1]
+        return len(words) >= 2
+
+    def _build_pdf_chunks(self, document_id: str, pdf_doc) -> List[Chunk]:
+        """Turn a `PDFDocument` into `Chunk`s, one page/section at a time.
+
+        Each segment's prose is cleaned of layout artefacts, sentence-chunked
+        and, if enabled, list-extracted; each table is fed through the existing
+        `TableExtractor`. Every resulting chunk's metadata carries
+        `{source_file, page, section_path}` for citation.
+
+        Chunks that carry no real content are dropped here rather than in the
+        shared splitter, which `ingest_document` also uses and whose behaviour
+        existing callers depend on.
+        """
+        chunks: List[Chunk] = []
+
+        for segment in pdf_doc.segments:
+            provenance = {
+                "source_file": pdf_doc.source_file,
+                "page": segment.page,
+                "section_path": segment.section_path,
+            }
+            segment_text = self._clean_pdf_text(segment.text)
+
+            for sentence_chunk in self.chunk_document(document_id, segment_text):
+                if not self._is_substantive(sentence_chunk.text):
+                    continue
+                sentence_chunk.metadata.update(provenance)
+                chunks.append(sentence_chunk)
+
+            if self._enabled("enable_list_extraction", True):
+                for item in self.list_extractor.extract_from_text(segment_text):
+                    if not self._is_substantive(item["text"]):
+                        continue
+                    chunks.append(Chunk(
+                        chunk_id=str(uuid.uuid4()),
+                        document_id=document_id,
+                        text=item["text"],
+                        embedding=None,
+                        metadata={
+                            "source": "ingestion_script",
+                            "word_count": len(item["text"].split()),
+                            **provenance,
+                        },
+                        chunk_type=item["type"],
+                        type_metadata=item.get("type_metadata"),
+                    ))
+
+        if self._enabled("enable_table_extraction", True):
+            for table in pdf_doc.tables:
+                provenance = {
+                    "source_file": pdf_doc.source_file,
+                    "page": table.page,
+                    "section_path": table.section_path,
+                }
+                table_id = f"{pdf_doc.source_file}:p{table.page}:t{table.table_index}"
+                for item in self.table_extractor.extract_from_html(table.html, table_id=table_id):
+                    if not self._is_substantive(item["text"]):
+                        continue
+                    chunks.append(Chunk(
+                        chunk_id=str(uuid.uuid4()),
+                        document_id=document_id,
+                        text=item["text"],
+                        embedding=None,
+                        metadata={
+                            "source": "ingestion_script",
+                            "word_count": len(item["text"].split()),
+                            **provenance,
+                        },
+                        chunk_type=item["type"],
+                        type_metadata=item.get("type_metadata"),
+                    ))
+
+        return chunks
+
+    def _finish_ingestion(
+        self,
+        document_id: str,
+        chunks: List[Chunk],
+        temporal_source_text: str = "",
+    ) -> Dict[str, Any]:
+        """Shared tail of `ingest_document`/`ingest_pdf`: temporal metadata,
+        embeddings, SVO/concept extraction, and writing to every store.
+        """
         # 2. Temporal metadata
         if self._enabled("enable_temporal_reasoning", True):
-            self._apply_temporal_metadata(chunks, raw_text)
+            self._apply_temporal_metadata(chunks, temporal_source_text)
             print("  -> Extracted temporal metadata.")
 
         # 3. Embeddings
