@@ -14,6 +14,16 @@ class BackendMode(Enum):
     AUTO = "auto"  # Auto-detect based on environment
 
 
+def _env_bool(name: str, default: str = "false") -> bool:
+    """Parse a boolean env var, accepting common truthy spellings.
+
+    A bare `.lower() == "true"` check silently treats "1", "yes", "on", or
+    "True " (trailing whitespace) as False, which is an easy misconfiguration
+    to hit and hard to notice since it fails silently rather than erroring.
+    """
+    return os.getenv(name, default).strip().lower() in ("true", "1", "yes", "on")
+
+
 @dataclass
 class ElasticsearchConfig:
     """Elasticsearch configuration."""
@@ -62,6 +72,7 @@ class PipelineConfig:
 
     # Storage
     sqlite_path: str = "svo_data.db"
+    sqlite_busy_timeout_s: float = 30.0
 
     # Backend configurations
     elasticsearch: ElasticsearchConfig = field(default_factory=ElasticsearchConfig)
@@ -81,6 +92,10 @@ class PipelineConfig:
     # Judge
     enable_lm_judge: bool = False
     judge_model_name: Optional[str] = None
+    judge_timeout_s: float = 20.0
+
+    # Query routing
+    enable_query_routing: bool = True
 
     # Concept extractor model
     concept_extractor_model_name: Optional[str] = None
@@ -145,6 +160,7 @@ class PipelineConfig:
             "use_production_backends": self.use_production_backends,
             "require_production_backends": self.require_production_backends,
             "sqlite_path": self.sqlite_path,
+            "sqlite_busy_timeout_s": self.sqlite_busy_timeout_s,
             "elasticsearch": self.elasticsearch.to_dict(),
             "milvus": self.milvus.to_dict(),
             "neo4j": self.neo4j.to_dict(),
@@ -157,6 +173,8 @@ class PipelineConfig:
             "evidence_span_classifier_model_name": self.evidence_span_classifier_model_name,
             "enable_lm_judge": self.enable_lm_judge,
             "judge_model_name": self.judge_model_name,
+            "judge_timeout_s": self.judge_timeout_s,
+            "enable_query_routing": self.enable_query_routing,
             "enable_lm_classifier": self.enable_lm_classifier,
             "classifier_model_name": self.classifier_model_name,
             "enable_cache": self.enable_cache,
@@ -231,27 +249,28 @@ class PipelineConfig:
         # Backend mode
         backend_mode = os.getenv("ONTO_BACKEND_MODE", "auto").lower()
         config.backend_mode = BackendMode(backend_mode)
-        config.use_production_backends = os.getenv("ONTO_USE_PRODUCTION_BACKENDS", "false").lower() == "true"
-        config.require_production_backends = os.getenv("ONTO_REQUIRE_PRODUCTION_BACKENDS", "false").lower() == "true"
+        config.use_production_backends = _env_bool("ONTO_USE_PRODUCTION_BACKENDS", "false")
+        config.require_production_backends = _env_bool("ONTO_REQUIRE_PRODUCTION_BACKENDS", "false")
 
         # Storage
         config.sqlite_path = os.getenv("ONTO_SQLITE_PATH", "svo_data.db")
+        config.sqlite_busy_timeout_s = float(os.getenv("ONTO_SQLITE_BUSY_TIMEOUT_S", "30"))
 
         # Elasticsearch
-        config.elasticsearch.enabled = os.getenv("ONTO_ES_ENABLED", "false").lower() == "true"
+        config.elasticsearch.enabled = _env_bool("ONTO_ES_ENABLED", "false")
         config.elasticsearch.host = os.getenv("ONTO_ES_HOST", "localhost")
         config.elasticsearch.port = int(os.getenv("ONTO_ES_PORT", "9200"))
         config.elasticsearch.index_name = os.getenv("ONTO_ES_INDEX", "svo_chunks")
 
         # Milvus
-        config.milvus.enabled = os.getenv("ONTO_MILVUS_ENABLED", "false").lower() == "true"
+        config.milvus.enabled = _env_bool("ONTO_MILVUS_ENABLED", "false")
         config.milvus.host = os.getenv("ONTO_MILVUS_HOST", "localhost")
         config.milvus.port = int(os.getenv("ONTO_MILVUS_PORT", "19530"))
         config.milvus.collection_name = os.getenv("ONTO_MILVUS_COLLECTION", "svo_embeddings")
         config.milvus.embedding_dim = int(os.getenv("ONTO_MILVUS_DIM", "384"))
 
         # Neo4j
-        config.neo4j.enabled = os.getenv("ONTO_NEO4J_ENABLED", "false").lower() == "true"
+        config.neo4j.enabled = _env_bool("ONTO_NEO4J_ENABLED", "false")
         config.neo4j.uri = os.getenv("ONTO_NEO4J_URI", "bolt://localhost:7687")
         config.neo4j.user = os.getenv("ONTO_NEO4J_USER", "neo4j")
         config.neo4j.password = os.getenv("ONTO_NEO4J_PASSWORD", "password")
@@ -266,15 +285,19 @@ class PipelineConfig:
         config.evidence_span_classifier_model_name = os.getenv("ONTO_EVIDENCE_SPAN_CLASSIFIER_MODEL", None)
 
         # Judge
-        config.enable_lm_judge = os.getenv("ONTO_ENABLE_LM_JUDGE", "false").lower() == "true"
+        config.enable_lm_judge = _env_bool("ONTO_ENABLE_LM_JUDGE", "false")
         config.judge_model_name = os.getenv("ONTO_JUDGE_MODEL", None)
+        config.judge_timeout_s = float(os.getenv("ONTO_JUDGE_TIMEOUT_S", "20"))
+
+        # Query routing
+        config.enable_query_routing = _env_bool("ONTO_ENABLE_QUERY_ROUTING", "true")
 
         # Classifier
-        config.enable_lm_classifier = os.getenv("ONTO_ENABLE_LM_CLASSIFIER", "false").lower() == "true"
+        config.enable_lm_classifier = _env_bool("ONTO_ENABLE_LM_CLASSIFIER", "false")
         config.classifier_model_name = os.getenv("ONTO_CLASSIFIER_MODEL", None)
 
         # Caching
-        config.enable_cache = os.getenv("ONTO_ENABLE_CACHE", "true").lower() == "true"
+        config.enable_cache = _env_bool("ONTO_ENABLE_CACHE", "true")
         config.cache_db_path = os.getenv("ONTO_CACHE_DB_PATH", "cache.db")
         config.embedding_cache_ttl_days = int(os.getenv("ONTO_EMBEDDING_CACHE_TTL_DAYS", "30"))
         config.retrieval_cache_ttl_days = int(os.getenv("ONTO_RETRIEVAL_CACHE_TTL_DAYS", "7"))
@@ -282,31 +305,31 @@ class PipelineConfig:
         config.cache_clear_interval_hours = int(os.getenv("ONTO_CACHE_CLEAR_INTERVAL_HOURS", "24"))
 
         # Multi-modal ingestion
-        config.enable_table_extraction = os.getenv("ONTO_ENABLE_TABLE_EXTRACTION", "true").lower() == "true"
-        config.enable_list_extraction = os.getenv("ONTO_ENABLE_LIST_EXTRACTION", "true").lower() == "true"
-        config.enable_ocr = os.getenv("ONTO_ENABLE_OCR", "false").lower() == "true"
+        config.enable_table_extraction = _env_bool("ONTO_ENABLE_TABLE_EXTRACTION", "true")
+        config.enable_list_extraction = _env_bool("ONTO_ENABLE_LIST_EXTRACTION", "true")
+        config.enable_ocr = _env_bool("ONTO_ENABLE_OCR", "false")
         config.table_extraction_mode = os.getenv("ONTO_TABLE_EXTRACTION_MODE", "html")
         config.min_ocr_confidence = float(os.getenv("ONTO_MIN_OCR_CONFIDENCE", "0.5"))
 
         # Temporal reasoning
-        config.enable_temporal_reasoning = os.getenv("ONTO_ENABLE_TEMPORAL_REASONING", "true").lower() == "true"
+        config.enable_temporal_reasoning = _env_bool("ONTO_ENABLE_TEMPORAL_REASONING", "true")
         config.outdated_evidence_confidence_penalty = float(os.getenv("ONTO_OUTDATED_EVIDENCE_PENALTY", "0.6"))
         config.future_evidence_confidence_penalty = float(os.getenv("ONTO_FUTURE_EVIDENCE_PENALTY", "0.3"))
         config.default_temporal_scope_years = int(os.getenv("ONTO_DEFAULT_TEMPORAL_SCOPE_YEARS", "5"))
 
         # Feedback loop
-        config.enable_feedback = os.getenv("ONTO_ENABLE_FEEDBACK", "true").lower() == "true"
+        config.enable_feedback = _env_bool("ONTO_ENABLE_FEEDBACK", "true")
         config.feedback_db_path = os.getenv("ONTO_FEEDBACK_DB_PATH", "feedback.db")
 
         # Observability payloads
-        config.enable_retrieval_pathway = os.getenv("ONTO_ENABLE_RETRIEVAL_PATHWAY", "true").lower() == "true"
-        config.enable_chunk_annotation = os.getenv("ONTO_ENABLE_CHUNK_ANNOTATION", "true").lower() == "true"
-        config.enable_scoring_breakdown = os.getenv("ONTO_ENABLE_SCORING_BREAKDOWN", "true").lower() == "true"
-        config.enable_rejected_evidence = os.getenv("ONTO_ENABLE_REJECTED_EVIDENCE", "true").lower() == "true"
+        config.enable_retrieval_pathway = _env_bool("ONTO_ENABLE_RETRIEVAL_PATHWAY", "true")
+        config.enable_chunk_annotation = _env_bool("ONTO_ENABLE_CHUNK_ANNOTATION", "true")
+        config.enable_scoring_breakdown = _env_bool("ONTO_ENABLE_SCORING_BREAKDOWN", "true")
+        config.enable_rejected_evidence = _env_bool("ONTO_ENABLE_REJECTED_EVIDENCE", "true")
 
         # Logging
-        config.verbose = os.getenv("ONTO_VERBOSE", "false").lower() == "true"
-        config.log_backend_usage = os.getenv("ONTO_LOG_BACKEND_USAGE", "false").lower() == "true"
+        config.verbose = _env_bool("ONTO_VERBOSE", "false")
+        config.log_backend_usage = _env_bool("ONTO_LOG_BACKEND_USAGE", "false")
 
         # sqlite_path was assigned after __post_init__ ran, so re-anchor the
         # derived paths against the final value.

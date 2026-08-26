@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 
 from .base import BaseRetriever, SQLiteCorpusMixin
 from ..models import RetrievalResult
+from ..storage.sqlite_conn import connect as _connect
 
 
 class LexicalRetriever(BaseRetriever):
@@ -52,14 +53,21 @@ class SQLiteLexicalRetriever(SQLiteCorpusMixin, BaseRetriever):
         super().__init__(cache_engine=cache_engine)
         self.db_path = db_path
 
-    def _retrieve_impl(self, query: str, top_k: int, **kwargs) -> List[RetrievalResult]:
+    def _retrieve_impl(
+        self, query: str, top_k: int, document_id: Optional[str] = None, **kwargs
+    ) -> List[RetrievalResult]:
         query_tokens = set(re.findall(r"\w+", query.lower()))
         if not query_tokens:
             return []
 
-        conn = sqlite3.connect(self.db_path)
+        conn = _connect(self.db_path)
         try:
-            rows = conn.execute("SELECT chunk_id, text FROM chunks").fetchall()
+            if document_id is not None:
+                rows = conn.execute(
+                    "SELECT chunk_id, text FROM chunks WHERE document_id = ?", (document_id,)
+                ).fetchall()
+            else:
+                rows = conn.execute("SELECT chunk_id, text FROM chunks").fetchall()
         finally:
             conn.close()
 

@@ -177,6 +177,12 @@ class EvidencePackEntry:
     matched_relation: bool
     matched_object: bool
 
+    # Carried through from EvidenceSpan so downstream judges can see
+    # temporal discounting instead of only match booleans (see
+    # HeuristicEvidenceJudge.judge).
+    confidence: float = 1.0
+    temporal_status: Optional[str] = None
+
 
 @dataclass
 class EvidencePack:

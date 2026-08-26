@@ -7,6 +7,28 @@ from typing import List, Dict, Any, Optional
 
 from .base import BaseRetriever, SQLiteCorpusMixin
 from ..models import RetrievalResult
+from ..storage.sqlite_conn import connect as _connect
+
+
+def _concept_matches_query(cp: str, query_tokens: set, query_word_list: List[str]) -> bool:
+    """Whole-word/phrase-boundary-aware match of a concept string against a query.
+
+    Replaces raw substring containment (`cp in query.lower()` / `token in cp`), which
+    spuriously matched e.g. concept "cat" against query "category", or concept "ca"
+    against query "cats are great" purely on character overlap. A concept matches only
+    if its tokens equal a whole query token (single-word concept) or appear as a
+    contiguous run of whole query tokens in order (multi-word/phrase concept).
+    """
+    cp_tokens = re.findall(r"\w+", cp)
+    if not cp_tokens:
+        return False
+    if len(cp_tokens) == 1:
+        return cp_tokens[0] in query_tokens
+    n = len(cp_tokens)
+    for i in range(len(query_word_list) - n + 1):
+        if query_word_list[i:i + n] == cp_tokens:
+            return True
+    return False
 
 
 class GraphRetriever(BaseRetriever):
@@ -57,19 +79,45 @@ class SQLiteGraphRetriever(SQLiteCorpusMixin, BaseRetriever):
         super().__init__(cache_engine=cache_engine)
         self.db_path = db_path
 
-    def _retrieve_impl(self, query: str, top_k: int, max_hops: int = 3, **kwargs) -> List[RetrievalResult]:
+    def _retrieve_impl(
+        self,
+        query: str,
+        top_k: int,
+        max_hops: int = 3,
+        document_id: Optional[str] = None,
+        **kwargs,
+    ) -> List[RetrievalResult]:
         query_tokens = set(re.findall(r"\w+", query.lower()))
         if not query_tokens:
             return []
 
-        conn = sqlite3.connect(self.db_path)
+        conn = _connect(self.db_path)
         try:
-            rows = conn.execute("SELECT chunk_id, text, metadata FROM chunks").fetchall()
-        except sqlite3.OperationalError:
-            try:
-                rows = [(r[0], r[1], None) for r in conn.execute("SELECT chunk_id, text FROM chunks").fetchall()]
-            except Exception:
-                rows = []
+            if document_id is not None:
+                try:
+                    rows = conn.execute(
+                        "SELECT chunk_id, text, metadata FROM chunks WHERE document_id = ?",
+                        (document_id,),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    try:
+                        rows = [
+                            (r[0], r[1], None)
+                            for r in conn.execute(
+                                "SELECT chunk_id, text FROM chunks WHERE document_id = ?",
+                                (document_id,),
+                            ).fetchall()
+                        ]
+                    except Exception:
+                        rows = []
+            else:
+                try:
+                    rows = conn.execute("SELECT chunk_id, text, metadata FROM chunks").fetchall()
+                except sqlite3.OperationalError:
+                    try:
+                        rows = [(r[0], r[1], None) for r in conn.execute("SELECT chunk_id, text FROM chunks").fetchall()]
+                    except Exception:
+                        rows = []
         finally:
             conn.close()
 
@@ -98,9 +146,10 @@ class SQLiteGraphRetriever(SQLiteCorpusMixin, BaseRetriever):
             for cp in depends_on:
                 concept_to_dependents.setdefault(cp.lower(), []).append(chunk_id)
 
+        query_word_list = re.findall(r"\w+", query.lower())
         matched_concepts = []
         for cp in list(concept_to_providers.keys()) + list(concept_to_dependents.keys()):
-            if cp in query.lower() or any(token in cp for token in query_tokens):
+            if _concept_matches_query(cp, query_tokens, query_word_list):
                 matched_concepts.append(cp)
         matched_concepts = list(dict.fromkeys(matched_concepts))
 

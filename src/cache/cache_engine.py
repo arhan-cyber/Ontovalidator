@@ -8,6 +8,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from ..storage.sqlite_conn import connect as _sqlite_connect
+
 DAY = 86400
 
 
@@ -18,7 +20,7 @@ def _connect(db_path: str):
     `with sqlite3.connect(...)` commits but leaves the handle open, which leaks
     file descriptors across the many short-lived cache operations here.
     """
-    conn = sqlite3.connect(db_path)
+    conn = _sqlite_connect(db_path)
     try:
         with conn:
             yield conn

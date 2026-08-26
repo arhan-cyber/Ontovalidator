@@ -5,7 +5,15 @@ import json
 import tempfile
 import pytest
 
-from src.config import PipelineConfig, BackendMode, ElasticsearchConfig, MilvusConfig, Neo4jConfig, load_config_from_env
+from src.config import (
+    PipelineConfig,
+    BackendMode,
+    ElasticsearchConfig,
+    MilvusConfig,
+    Neo4jConfig,
+    load_config_from_env,
+    _env_bool,
+)
 
 
 class TestConfigDefaults:
@@ -369,3 +377,39 @@ class TestConvenienceFunctions:
         assert isinstance(config, PipelineConfig)
         assert config.backend_mode == BackendMode.DEMO
         assert config.sqlite_path == "test.db"
+
+
+class TestBooleanEnvParsing:
+    """`_env_bool` must accept common truthy spellings, not just literal 'true'.
+
+    A bare `.lower() == "true"` check silently treats "1", "yes", "on", or a
+    value with trailing whitespace as False - a misconfiguration that fails
+    silently rather than erroring, which makes it easy to miss.
+    """
+
+    @pytest.mark.parametrize(
+        "value", ["true", "True", "TRUE", "1", "yes", "YES", "on", "true "]
+    )
+    def test_truthy_spellings_via_env(self, monkeypatch, value):
+        monkeypatch.setenv("ONTO_ENABLE_LM_JUDGE", value)
+        config = PipelineConfig.load_from_env()
+        assert config.enable_lm_judge is True
+
+    @pytest.mark.parametrize(
+        "value", ["false", "False", "0", "no", "", "garbage", "off"]
+    )
+    def test_falsy_spellings_via_env(self, monkeypatch, value):
+        monkeypatch.setenv("ONTO_ENABLE_LM_JUDGE", value)
+        config = PipelineConfig.load_from_env()
+        assert config.enable_lm_judge is False
+
+    def test_direct_helper(self, monkeypatch):
+        monkeypatch.setenv("ONTO_TEST_BOOL", "1")
+        assert _env_bool("ONTO_TEST_BOOL") is True
+        monkeypatch.setenv("ONTO_TEST_BOOL", "True ")
+        assert _env_bool("ONTO_TEST_BOOL") is True
+        monkeypatch.setenv("ONTO_TEST_BOOL", "nope")
+        assert _env_bool("ONTO_TEST_BOOL") is False
+        monkeypatch.delenv("ONTO_TEST_BOOL", raising=False)
+        assert _env_bool("ONTO_TEST_BOOL", "true") is True
+        assert _env_bool("ONTO_TEST_BOOL", "false") is False

@@ -89,37 +89,75 @@ class TransformerEmbeddingModel(CachedEncoderMixin):
 
 
 class TransformerSVOExtractor:
-    """LLM-based SVO extraction using Flan-T5."""
+    """LLM-based SVO extraction using Flan-T5.
+
+    Uses a few-shot prompt (one worked example) rather than a bare zero-shot
+    instruction. Zero-shot prompting on flan-t5-small was observed to ignore
+    the "Subject, Relation, Object" format entirely and just echo back a noun
+    phrase with no commas at all (e.g. "Aspirin reduces inflammation and
+    relieves pain..." -> "Aspirin") - the parser's `len(parts) >= 3` guard
+    then silently discarded every sentence, so the extractor was a no-op
+    on ordinary text without ever raising an error. `TransformerConceptExtractor`
+    hit the same zero-shot failure mode and was already fixed with a worked
+    example.
+
+    Even few-shot, flan-t5-small (and flan-t5-base) follow the requested
+    format inconsistently - roughly half of ordinary sentences still come
+    back as an un-parseable echo or a malformed non-triple. Rather than ship
+    a component that's a coin-flip between "real extraction" and "silent
+    no-op", any sentence the model doesn't cleanly parse falls back to the
+    same verb-phrase heuristic `MockSVOExtractor` uses, so this extractor is
+    LM-first but never actually empty-handed on text with a recognizable verb.
+    """
+
+    MAX_PART_WORDS = 8  # defensive guard: reject a part this long as clearly not a clean S/R/O
+
+    _SVO_PROMPT = (
+        "Extract the main Subject, Relation, and Object from this sentence. "
+        "Output ONLY a comma-separated triple: Subject, Relation, Object.\n\n"
+        "Text: Aspirin reduces inflammation and relieves pain in patients with arthritis.\n"
+        "Triple: Aspirin, reduces, inflammation\n\n"
+        "Text: {text}\n"
+        "Triple:"
+    )
 
     def __init__(self, model_name: str = "google/flan-t5-small"):
         from transformers import T5Tokenizer, AutoModelForSeq2SeqLM
+        from .extractors import MockSVOExtractor
         self.tokenizer = T5Tokenizer.from_pretrained(model_name)
         self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        self._fallback = MockSVOExtractor()
 
     def extract(self, text: str):
-        import torch
         from ..models import SVORelation
 
-        prompt = f"Extract Subject-Verb-Object relations from text as 'Subject, Relation, Object'. Text: {text}"
-        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
-        with torch.no_grad():
-            outputs = self.model.generate(**inputs, max_length=64)
-        output_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        if not text or not text.strip():
+            return []
 
-        relations = []
-        parts = [p.strip() for p in output_text.split(",")]
-        if len(parts) >= 3:
-            subject = parts[0]
-            relation = parts[1]
-            obj = parts[2]
+        try:
+            import torch
 
-            relations.append(SVORelation(
-                subject_id="ent_" + re.sub(r'[^a-z0-9_]', '_', subject.lower()),
-                subject_name_type=subject,
-                relation=relation.upper(),
-                object_id="ent_" + re.sub(r'[^a-z0-9_]', '_', obj.lower()),
-                object_name_type=obj,
-                source_chunk_ids=[]
-            ))
+            prompt = self._SVO_PROMPT.format(text=text[:512])
+            inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=768)
+            with torch.no_grad():
+                outputs = self.model.generate(**inputs, max_length=64, num_beams=1)
+            output_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-        return relations
+            parts = [p.strip().rstrip(".") for p in output_text.split(",")]
+            parts = [p for p in parts if p]
+            if len(parts) >= 3 and all(len(p.split()) <= self.MAX_PART_WORDS for p in parts[:3]):
+                subject, relation, obj = parts[0], parts[1], parts[2]
+                return [SVORelation(
+                    subject_id="ent_" + re.sub(r'[^a-z0-9_]', '_', subject.lower()),
+                    subject_name_type=subject,
+                    relation=relation.upper(),
+                    object_id="ent_" + re.sub(r'[^a-z0-9_]', '_', obj.lower()),
+                    object_name_type=obj,
+                    source_chunk_ids=[]
+                )]
+        except Exception:
+            pass
+
+        # The model didn't produce a parseable triple (or errored) - fall
+        # back to the deterministic heuristic rather than returning nothing.
+        return self._fallback.extract(text)

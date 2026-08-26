@@ -16,6 +16,30 @@ class BaseEvidenceJudge(ABC):
 class HeuristicEvidenceJudge(BaseEvidenceJudge):
     """Deterministic evidence judge used as the baseline and fallback."""
 
+    # An evidence entry only counts as a "direct support match" strong enough
+    # to escalate a verdict to "supported" if its (possibly temporally
+    # discounted) confidence clears this bar. Mirrors engine.py's
+    # SUPPORTED_SUPPORT_THRESHOLD so a triple that the heuristic aggregator
+    # would only call "partial" (because temporal discounting knocked
+    # support_strength below that threshold) can't be silently escalated
+    # back to "supported" by this judge looking only at match booleans.
+    MIN_SUPPORT_CONFIDENCE = 0.7
+
+    # Evidence whose temporal_status marks it as outside the claim's
+    # temporal scope should never single-handedly justify "supported",
+    # regardless of its raw confidence value.
+    STALE_TEMPORAL_STATUSES = {"outdated", "future"}
+
+    @classmethod
+    def _is_strong_support(cls, entry) -> bool:
+        return (
+            entry.matched_subject
+            and entry.matched_relation
+            and entry.matched_object
+            and entry.confidence >= cls.MIN_SUPPORT_CONFIDENCE
+            and entry.temporal_status not in cls.STALE_TEMPORAL_STATUSES
+        )
+
     def judge(self, evidence_pack: EvidencePack) -> JudgeVerdict:
         supports = [e for e in evidence_pack.evidence if e.support_type == "supports"]
         refutes = [e for e in evidence_pack.evidence if e.support_type == "refutes"]
@@ -30,7 +54,7 @@ class HeuristicEvidenceJudge(BaseEvidenceJudge):
                 counterevidence_chunk_ids=[e.chunk_id for e in refutes],
                 graph_reasoning=None,
             )
-        if supports and not refutes and any(e.matched_subject and e.matched_relation and e.matched_object for e in supports):
+        if supports and not refutes and any(self._is_strong_support(e) for e in supports):
             return JudgeVerdict(
                 label="supported",
                 confidence=0.88,

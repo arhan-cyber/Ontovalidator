@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import List
 
 from ..models import Chunk, ChunkType
+from .sqlite_conn import connect as _connect
 
 # Columns added after the original (chunk_id, document_id, text, metadata) schema.
 # Existing databases are migrated in place with ALTER TABLE.
@@ -97,7 +98,7 @@ class SQLiteChunkStore(ChunkStore):
         self._init_db()
 
     def _init_db(self):
-        conn = sqlite3.connect(self.db_path)
+        conn = _connect(self.db_path)
         try:
             with conn:
                 ensure_chunks_schema(conn)
@@ -113,7 +114,7 @@ class SQLiteChunkStore(ChunkStore):
         query = f"SELECT {CHUNK_SELECT_COLUMNS} FROM chunks WHERE chunk_id IN ({placeholders})"
 
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = _connect(self.db_path)
             try:
                 cursor = conn.execute(query, chunk_ids)
                 for row in cursor:

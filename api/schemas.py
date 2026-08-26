@@ -15,9 +15,9 @@ class TemporalScopeIn(BaseModel):
 
 class TripleIn(BaseModel):
     assertion_id: Optional[str] = None
-    subject: str
-    relation: str
-    object: str
+    subject: str = Field(min_length=1, max_length=500)
+    relation: str = Field(min_length=1, max_length=500)
+    object: str = Field(min_length=1, max_length=500)
     polarity: str = "must_hold"
     rule_type: str = "constraint"
     temporal_scope: Optional[TemporalScopeIn] = None
@@ -25,9 +25,9 @@ class TripleIn(BaseModel):
 
 class ValidateRequest(BaseModel):
     document_id: Optional[str] = None
-    raw_text: str
-    triples: List[TripleIn] = Field(min_length=1)
-    top_k: int = 5
+    raw_text: str = Field(min_length=1, max_length=2_000_000)
+    triples: List[TripleIn] = Field(min_length=1, max_length=500)
+    top_k: int = Field(default=5, ge=1, le=100)
     embedding_model: Optional[str] = None
     svo_extractor: Optional[str] = None
 
@@ -87,6 +87,7 @@ class SummaryOut(BaseModel):
     unknown: int
     avg_score: float
     cache_hits: int = 0
+    errors: int = 0
 
 
 class BackendStatusOut(BaseModel):

@@ -2,6 +2,7 @@
 
 import sqlite3
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from typing import List, Dict, Any, Optional, Tuple
 from uuid import uuid4
 
@@ -16,12 +17,13 @@ from .models import (
     EvidencePackEntry,
     JudgeVerdict,
 )
-from .routing import QueryRouter, MoERouter
+from .routing import QueryRouter, MoERouter, retrievers_for as _retrievers_for, ALL_RETRIEVERS
 from .retrieval import BaseRetriever, SQLiteGraphRetriever
 from .retrieval.explainer import RetrieverExplainer
 from .annotation.annotator import ChunkAnnotator
 from .fusion import FusionEngine, WeightedFusionEngine
 from .storage import ChunkStore, SQLiteChunkStore
+from .storage.sqlite_conn import connect as _connect
 from .validation import EvidenceValidator, MinimalValidator
 from .feedback.explainer import RejectionExplainer
 from .classification.evidence_judge import BaseEvidenceJudge, HeuristicEvidenceJudge
@@ -110,6 +112,42 @@ class SVOVerificationEngine:
 
     def _build_assertion_query(self, assertion: OntologyAssertion) -> str:
         return f"{assertion.subject} {assertion.relation} {assertion.object}"
+
+    @staticmethod
+    def _call_with_timeout(fn, timeout_s: float, *args, **kwargs):
+        """Bound how long the caller waits on a synchronous call.
+
+        Python can't cancel a running thread, so a call that exceeds
+        `timeout_s` keeps running in the background until it finishes (its
+        result is discarded) - this bounds request latency, not the
+        underlying call itself. That's an accepted tradeoff for wrapping
+        sync, CPU-bound model calls without a native cancellation hook.
+        """
+        # Not a `with` block: ThreadPoolExecutor.__exit__ calls shutdown(wait=True),
+        # which would block until the submitted call finishes anyway, defeating
+        # the timeout. shutdown(wait=False) lets `result(timeout=...)` actually
+        # bound the caller's wait.
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(fn, *args, **kwargs)
+        try:
+            return future.result(timeout=timeout_s)
+        finally:
+            pool.shutdown(wait=False)
+
+    def _active_retrievers(self, query: str) -> Dict[str, Any]:
+        """Which retrievers to query for `query`, and the routes that decided it.
+
+        Query routing is enabled by default (`config.enable_query_routing`);
+        disabling it reproduces the pre-routing behavior of always querying
+        all three retrievers, which is also the fallback when no config is
+        available at all (e.g. direct engine construction in a test).
+        """
+        routes = self.router.route(query)
+        if self.config and not self.config.enable_query_routing:
+            active = set(ALL_RETRIEVERS)
+        else:
+            active = _retrievers_for(routes)
+        return {"routes": routes, "active": active}
 
     def _chunk_evidence_for_assertion(
         self,
@@ -332,6 +370,8 @@ class SVOVerificationEngine:
                     matched_subject=span.matched_subject,
                     matched_relation=span.matched_relation,
                     matched_object=span.matched_object,
+                    confidence=span.confidence,
+                    temporal_status=span.temporal_status,
                 )
             )
         graph_summary = []
@@ -414,10 +454,12 @@ class SVOVerificationEngine:
         self,
         document_text: Optional[str],
         assertion: OntologyAssertion,
+        document_id: Optional[str] = None,
         top_k: int = 5
     ) -> TripleVerdict:
         if document_text:
             doc_id = f"adjudicate_{abs(hash(document_text))}"
+            document_id = doc_id
             try:
                 from .ingestion import DataIngestor, SimpleEmbeddingModel, MockSVOExtractor, MockConceptExtractor
                 if isinstance(self.chunk_store, SQLiteChunkStore):
@@ -436,17 +478,27 @@ class SVOVerificationEngine:
                 pass
 
         query = self._build_assertion_query(assertion)
+        routing = self._active_retrievers(query)
+        active = routing["active"]
         if self.config and self.config.verbose:
-            logger.debug(f"router diagnostics (unused for gating): {self.router.route(query)}")
+            logger.debug(f"router selected {sorted(active)} for routes {routing['routes']}")
         retrieval_results: List[RetrievalResult] = []
-        retrieval_results.extend(self.lexical_store.retrieve(query, top_k))
-        retrieval_results.extend(self.semantic_store.retrieve(query, top_k))
-        retrieval_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
+        if "lexical" in active:
+            retrieval_results.extend(self.lexical_store.retrieve(query, top_k, document_id=document_id))
+        if "semantic" in active:
+            retrieval_results.extend(self.semantic_store.retrieve(query, top_k, document_id=document_id))
+        if "graph" in active:
+            retrieval_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3, document_id=document_id))
 
         if not retrieval_results and isinstance(self.chunk_store, SQLiteChunkStore):
-            conn = sqlite3.connect(self.chunk_store.db_path)
+            conn = _connect(self.chunk_store.db_path, timeout_s=(self.config.sqlite_busy_timeout_s if self.config else 30.0))
             try:
-                rows = conn.execute("SELECT chunk_id FROM chunks").fetchall()
+                if document_id is not None:
+                    rows = conn.execute(
+                        "SELECT chunk_id FROM chunks WHERE document_id = ?", (document_id,)
+                    ).fetchall()
+                else:
+                    rows = conn.execute("SELECT chunk_id FROM chunks").fetchall()
                 for row in rows:
                     retrieval_results.append(RetrievalResult(chunk_id=row[0], score=0.0, source="fallback"))
             finally:
@@ -477,8 +529,14 @@ class SVOVerificationEngine:
 
         judge_verdict = None
         if self.evidence_judge and self._should_run_evidence_judge(heuristic_verdict, evidence_pack):
+            timeout_s = self.config.judge_timeout_s if self.config else 20.0
             try:
-                judge_verdict = self.evidence_judge.judge(evidence_pack)
+                judge_verdict = self._call_with_timeout(
+                    self.evidence_judge.judge, timeout_s, evidence_pack
+                )
+            except FutureTimeoutError:
+                logger.warning("evidence_judge.judge timed out after %ss; falling back to heuristic", timeout_s)
+                judge_verdict = None
             except Exception:
                 judge_verdict = None
 
@@ -573,6 +631,7 @@ class SVOVerificationEngine:
             verdict = self.adjudicate_triple(
                 document_text=document_text,
                 assertion=assertion,
+                document_id=document_id,
                 top_k=top_k,
             )
             self.export_triple_adjudication(verdict, writer, document_id=document_id)
@@ -585,15 +644,20 @@ class SVOVerificationEngine:
         top_k: int = 10,
         ontology_assertions: Optional[List[OntologyAssertion]] = None
     ) -> Dict[str, Any]:
+        routing = self._active_retrievers(query)
+        active = routing["active"]
         if self.config and self.config.verbose:
-            logger.debug(f"router diagnostics (unused for gating): {self.router.route(query)}")
+            logger.debug(f"router selected {sorted(active)} for routes {routing['routes']}")
         all_results = []
-        all_results.extend(self.lexical_store.retrieve(query, top_k))
-        all_results.extend(self.semantic_store.retrieve(query, top_k))
-        all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
+        if "lexical" in active:
+            all_results.extend(self.lexical_store.retrieve(query, top_k))
+        if "semantic" in active:
+            all_results.extend(self.semantic_store.retrieve(query, top_k))
+        if "graph" in active:
+            all_results.extend(self.graph_store.retrieve(query, top_k, max_hops=3))
 
         if ontology_assertions and not all_results and isinstance(self.chunk_store, SQLiteChunkStore):
-            conn = sqlite3.connect(self.chunk_store.db_path)
+            conn = _connect(self.chunk_store.db_path, timeout_s=(self.config.sqlite_busy_timeout_s if self.config else 30.0))
             try:
                 chunk_ids = [row[0] for row in conn.execute("SELECT chunk_id FROM chunks").fetchall()]
             finally:
@@ -700,6 +764,7 @@ class SVOVerificationEngine:
         document_fingerprint = self._document_fingerprint(raw_text)
         verdicts = []
         cache_hits = 0
+        errors = 0
         for triple in triples:
             cached = self._cached_verdict(triple.assertion_id, document_id, document_fingerprint)
             if cached is not None:
@@ -707,13 +772,19 @@ class SVOVerificationEngine:
                 verdicts.append(cached)
                 continue
 
-            verdict = self.adjudicate_triple(
-                document_text=None,  # Already ingested
-                assertion=triple,
-                top_k=top_k
-            )
-            verdict_dict = self._serialize_verdict(verdict)
-            self._store_verdict(verdict, verdict_dict, document_id, document_fingerprint)
+            try:
+                verdict = self.adjudicate_triple(
+                    document_text=None,  # Already ingested
+                    assertion=triple,
+                    document_id=document_id,
+                    top_k=top_k
+                )
+                verdict_dict = self._serialize_verdict(verdict)
+                self._store_verdict(verdict, verdict_dict, document_id, document_fingerprint)
+            except Exception:
+                logger.exception("adjudication failed for triple %s", triple.assertion_id)
+                verdict_dict = self._build_error_verdict(triple)
+                errors += 1
             verdicts.append(verdict_dict)
 
         # Step 3: Compute summary statistics
@@ -725,6 +796,7 @@ class SVOVerificationEngine:
             "unknown": sum(1 for v in verdicts if v["label"] == "unknown"),
             "avg_score": sum(v["score"] for v in verdicts) / len(verdicts) if verdicts else 0.0,
             "cache_hits": cache_hits,
+            "errors": errors,
         }
 
         return {
@@ -779,6 +851,31 @@ class SVOVerificationEngine:
                 verdict.feedback_id,
                 ttl_seconds=ttl_days * 86400,
             )
+
+    @staticmethod
+    def _build_error_verdict(triple: OntologyAssertion) -> Dict[str, Any]:
+        """Fallback verdict dict for a triple whose adjudication raised.
+
+        Keeps one bad triple from taking down the rest of the batch (see
+        validate_triples_batch): the failure is logged server-side and this
+        placeholder is returned in its place so the response stays 200.
+        """
+        return {
+            "assertion_id": triple.assertion_id,
+            "subject": triple.subject,
+            "relation": triple.relation,
+            "object": triple.object,
+            "label": "unknown",
+            "score": 0.0,
+            "rationale": "Adjudication failed for this triple; see server logs.",
+            "evidence": [],
+            "rule_hits": [],
+            "retrieval_sources": [],
+            "scoring_breakdown": None,
+            "decision_thresholds": None,
+            "rejected_evidence": [],
+            "feedback_id": None,
+        }
 
     def _serialize_verdict(self, verdict: TripleVerdict) -> Dict[str, Any]:
         """JSON-serializable form of a verdict, including the transparency payloads."""

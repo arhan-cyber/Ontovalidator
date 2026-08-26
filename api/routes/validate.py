@@ -19,8 +19,6 @@ router = APIRouter()
 async def validate(req: ValidateRequest):
     if not req.raw_text.strip():
         raise HTTPException(400, {"error": "raw_text must not be empty"})
-    if not req.triples:
-        raise HTTPException(400, {"error": "at least one triple is required"})
 
     engine = dependencies.resolve_engine(req.embedding_model, req.svo_extractor)
     document_id = req.document_id or f"doc_{uuid4().hex[:12]}"

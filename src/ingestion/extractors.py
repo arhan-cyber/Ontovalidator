@@ -4,36 +4,81 @@ from typing import List, Dict, Optional
 import re
 
 from ..models import SVORelation
+from .sentence_split import split_sentences
 
 
 class MockSVOExtractor:
-    """Mock SVO extractor with hardcoded rules. Production uses LLM."""
+    """Lightweight, dependency-free SVO extractor. Production uses LLM.
 
+    Not a real parser: there's no POS tagging or dependency parsing here, no
+    spaCy/nltk in this project's requirements (consistent with
+    SimpleEmbeddingModel's "CPU-only, no dependencies" tier). Instead, each
+    sentence is scanned for the first occurrence of a verb phrase from a
+    curated cross-domain list; everything before it becomes the subject,
+    everything after becomes the object. Good enough as a zero-dependency
+    stand-in for TransformerSVOExtractor on arbitrary text, not just the
+    aspirin/headache demo domain the previous hardcoded version was locked to.
+    """
+
+    # Multi-word phrases and irregular verbs, matched literally.
+    _IRREGULAR_PHRASES = (
+        "results in", "leads to", "depends on", "contributes to",
+        "correlates with", "consists of",
+        "has", "have", "is", "are", "was", "were",
+    )
+    # Regular verbs, matched in either base or third-person-singular form
+    # ("require" or "requires") since real text uses both - a plain keyword
+    # list of only one inflection (the previous version's bug) silently
+    # misses half of ordinary sentences.
+    _REGULAR_VERBS = (
+        "treat", "cause", "reduce", "prevent", "increase", "decrease",
+        "affect", "require", "contain", "produce", "support", "contradict",
+        "improve", "damage", "boost", "inhibit", "activate", "regulate",
+        "include", "exclude", "generate", "consume", "emit", "absorb",
+        "influence", "enable", "trigger", "block", "protect", "weaken",
+        "strengthen", "replace", "extend", "implement", "optimize", "validate",
+    )
+    _VERB_RE = re.compile(
+        r"\b(?:"
+        + "|".join(re.escape(p) for p in _IRREGULAR_PHRASES)
+        + "|"
+        + "|".join(re.escape(v) + "s?" for v in _REGULAR_VERBS)
+        + r")\b",
+        re.IGNORECASE,
+    )
     def extract(self, text: str) -> List[SVORelation]:
-        lowered = text.lower()
+        sentences = split_sentences(text) or [text]
         relations = []
-
-        if "treats" in lowered or "headache" in lowered:
-            relations.append(SVORelation(
-                subject_id="ent_aspirin",
-                subject_name_type="Aspirin (Drug)",
-                relation="TREATS",
-                object_id="ent_headache",
-                object_name_type="Headache (Condition)",
-                source_chunk_ids=[]
-            ))
-
-        if "fever" in lowered or "reduce" in lowered:
-            relations.append(SVORelation(
-                subject_id="ent_aspirin",
-                subject_name_type="Aspirin (Drug)",
-                relation="REDUCES",
-                object_id="ent_fever",
-                object_name_type="Fever (Condition)",
-                source_chunk_ids=[]
-            ))
-
+        for sentence in sentences:
+            relation = self._extract_one(sentence)
+            if relation:
+                relations.append(relation)
         return relations
+
+    def _extract_one(self, sentence: str) -> Optional[SVORelation]:
+        match = self._VERB_RE.search(sentence)
+        if not match:
+            return None
+
+        subject = sentence[: match.start()].strip(" ,.;:")
+        obj = sentence[match.end():].strip(" ,.;:!?")
+        if not subject or not obj:
+            return None
+
+        phrase = match.group(0).lower()
+        return SVORelation(
+            subject_id=self._slugify(subject),
+            subject_name_type=subject,
+            relation=phrase.upper().replace(" ", "_"),
+            object_id=self._slugify(obj),
+            object_name_type=obj,
+            source_chunk_ids=[],
+        )
+
+    @staticmethod
+    def _slugify(text: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+        return f"ent_{slug}" if slug else "ent_unknown"
 
 
 class MockConceptExtractor:

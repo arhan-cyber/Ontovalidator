@@ -75,6 +75,47 @@ def test_validate_model_override_selects_pooled_engine(client, stub_engine_pool)
     stub_engine_pool[("simple", "mock")].validate_triples_batch.assert_not_called()
 
 
+def test_validate_raw_text_empty_string_rejected_by_schema(client):
+    resp = client.post("/api/validate", json=valid_payload(raw_text=""))
+    assert resp.status_code == 422  # min_length=1
+
+
+def test_validate_too_many_triples_rejected(client):
+    payload = valid_payload()
+    payload["triples"] = [
+        {"subject": "engine", "relation": "drives", "object": "wheel"}
+    ] * 501
+    resp = client.post("/api/validate", json=payload)
+    assert resp.status_code == 422
+
+
+def test_validate_top_k_zero_rejected(client):
+    resp = client.post("/api/validate", json=valid_payload(top_k=0))
+    assert resp.status_code == 422
+
+
+def test_validate_top_k_negative_rejected(client):
+    resp = client.post("/api/validate", json=valid_payload(top_k=-5))
+    assert resp.status_code == 422
+
+
+def test_validate_top_k_too_large_rejected(client):
+    resp = client.post("/api/validate", json=valid_payload(top_k=101))
+    assert resp.status_code == 422
+
+
+def test_validate_top_k_within_bounds_accepted(client, mock_engine):
+    resp = client.post("/api/validate", json=valid_payload(top_k=100))
+    assert resp.status_code == 200
+
+
+def test_validate_empty_subject_rejected(client):
+    payload = valid_payload()
+    payload["triples"] = [{"subject": "", "relation": "drives", "object": "wheel"}]
+    resp = client.post("/api/validate", json=payload)
+    assert resp.status_code == 422
+
+
 def test_validate_default_id_generation(client, mock_engine):
     payload = valid_payload()
     payload.pop("document_id", None)

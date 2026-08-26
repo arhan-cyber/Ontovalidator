@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
 from ..models import TripleVerdict
+from ..storage.sqlite_conn import connect as _sqlite_connect
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS feedback (
@@ -42,7 +43,7 @@ def _connect(db_path: str):
     `with sqlite3.connect(...)` commits but leaves the handle open, so a
     long-running API process would accumulate one descriptor per correction.
     """
-    conn = sqlite3.connect(db_path)
+    conn = _sqlite_connect(db_path)
     try:
         with conn:
             yield conn

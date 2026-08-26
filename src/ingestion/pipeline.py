@@ -2,14 +2,15 @@
 
 import uuid
 import json
-import re
 import sqlite3
 from typing import List, Dict, Any, Optional
 
 from ..models import Chunk, ChunkType, SVORelation
 from ..storage.chunk_store import ensure_chunks_schema
+from ..storage.sqlite_conn import connect as _connect
 from .extractors import MockSVOExtractor, MockConceptExtractor
 from .embeddings import SimpleEmbeddingModel
+from .sentence_split import split_sentences
 from .list_extractor import ListExtractor
 from .table_extractor import TableExtractor
 from .image_extractor import ImageExtractor
@@ -100,7 +101,10 @@ class DataIngestor:
     def _enabled(self, flag: str, default: bool) -> bool:
         return bool(getattr(self.config, flag, default)) if self.config else default
 
-    _SENTENCE_PATTERN = re.compile(r".+?[.!?](?:\[[^\]]*\])*(?=\s+|$)")
+    @staticmethod
+    def _split_sentences(text: str) -> List[str]:
+        """Split text into sentences. See `.sentence_split.split_sentences`."""
+        return split_sentences(text)
 
     def chunk_document(self, document_id: str, raw_text: str) -> List[Chunk]:
         """Split raw text into chunks by sentence.
@@ -112,7 +116,7 @@ class DataIngestor:
         lets trailing citation brackets stay attached to their sentence.
         """
         stripped = raw_text.strip()
-        sentences = self._SENTENCE_PATTERN.findall(stripped)
+        sentences = self._split_sentences(stripped)
         if not sentences:
             sentences = [stripped]
         chunks = []
@@ -276,10 +280,29 @@ class DataIngestor:
         }
 
     def _write_sqlite(self, chunks: List[Chunk]):
-        conn = sqlite3.connect(self.sqlite_path)
+        """Replace a document's chunks atomically, not accumulate them.
+
+        Each call generates fresh chunk_id UUIDs, so `INSERT OR REPLACE`
+        keyed on chunk_id never touches a document's previous rows - every
+        re-ingestion of the same document_id (a normal workflow: re-posting
+        a corrected document, or two concurrent requests for the same
+        document_id) silently left old, possibly-wrong chunks in place
+        forever, growing without bound and still being retrieved as
+        "evidence" alongside the new content. Deleting the document's prior
+        rows in the same transaction as the new inserts makes re-ingestion a
+        clean replace, and as a side effect makes two concurrent
+        same-document_id ingestions serialize into one consistent
+        last-writer-wins result instead of both partially landing.
+        """
+        if not chunks:
+            return
+        document_ids = {c.document_id for c in chunks}
+        conn = _connect(self.sqlite_path)
         try:
             with conn:
                 ensure_chunks_schema(conn)
+                for document_id in document_ids:
+                    conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
                 for c in chunks:
                     chunk_type = c.chunk_type.value if isinstance(c.chunk_type, ChunkType) else str(c.chunk_type)
                     conn.execute(
