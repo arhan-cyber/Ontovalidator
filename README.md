@@ -153,18 +153,55 @@ Ontovalidator/
 │   ├── classification/    # Evidence-span classifiers, evidence judges
 │   ├── cache/              # Embedding/retrieval/verdict caching
 │   ├── feedback/           # Correction recording + analysis
+│   ├── ontology/           # Enterprise-ontology compliance (conformance + grounding)
 │   └── helpers/            # Elasticsearch/Milvus/Neo4j client helpers
 ├── api/                    # FastAPI app (routes, schemas, dependency-injected engine pool)
 ├── frontend/                # React SPA (see frontend/README.md)
 ├── scripts/                 # CLI entry points
 │   └── diagnostics/         # Ad hoc diagnostic scripts (not the pytest suite)
 ├── tests/                   # pytest suite (tests/api/, tests/integration/)
-├── docs/                    # Living reference docs (ENHANCEMENTS.md, FULL_PRODUCTION_RUN.md)
+├── docs/                    # Living reference docs (ENHANCEMENTS.md, FULL_PRODUCTION_RUN.md, ONTOLOGY_COMPLIANCE.md)
 ├── archive/                  # Superseded code and historical planning docs, kept for reference
 ├── ASSUMPTIONS/              # Documented design assumptions and reasoning tradeoffs
 ├── examples/                 # Sample input documents
 └── docker-compose.yml         # Neo4j + Elasticsearch (no Milvus - see docs/FULL_PRODUCTION_RUN.md)
 ```
+
+## Ontology compliance
+
+Beyond validating loose SVO triples, the pipeline can validate a whole
+**enterprise ontology** on two independent axes:
+
+* **structural conformance** — does the ontology obey its meta-model? (meta-class
+  schemas, the edge grammar, the ONT-000..ONT-013 systemic rules)
+* **evidential grounding** — do the source process documents support the claims
+  it makes? (reuses the retrieval + adjudication engine, with PDF ingestion)
+
+```bash
+# Conformance only: no corpus, no models, ~50ms.
+python scripts/validate_ontology.py --plane a
+
+# Both planes against a directory of PDFs.
+python scripts/validate_ontology.py --documents Documents/ --out report.json
+
+# Adjudicate meta-model-vs-ontology disagreements interactively.
+python scripts/validate_ontology.py --plane a --review
+```
+
+The two planes are reported separately and never averaged — "conformant but
+contradicted by the process manual" is the finding worth surfacing, and a
+combined score is exactly what would hide it.
+
+Disagreements between the blueprint and the ontology go to a persistent
+adjudication queue (`conflicts.db`) rather than being silently counted as
+errors, because some of them are blueprint gaps rather than ontology defects.
+Rulings are idempotent across runs.
+
+**Grounding currently needs production backends to be meaningful** — on the
+SQLite demo tier `supported` is unreachable by construction, and the report
+says so itself (`grounding.confidence: low`). See
+`docs/ONTOLOGY_COMPLIANCE.md` for why, and `docs/ONTOLOGY_COMPLIANCE_PLAN.md`
+for the design and decision log.
 
 ## Configuration
 
