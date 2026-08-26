@@ -8,3 +8,9 @@ __pycache__/
 frontend/node_modules/
 frontend/dist/
 frontend/.pytest_cache/
+
+# Source documents and ontology inputs - supplied per-deployment, not versioned
+# (IT4IT Standards PDF alone is ~19 MB). Paths are configurable via
+# ONTO_ONTOLOGY_PATH / ONTO_METAMODEL_PATH / ONTO_DOCUMENT_CORPUS_PATH.
+Documents/
+Ontology n metamodel/
