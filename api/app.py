@@ -18,6 +18,7 @@ from api import dependencies
 from api.errors import register_exception_handlers
 from api.routes import config as config_route
 from api.routes import feedback as feedback_route
+from api.routes import ontology as ontology_route
 from api.routes import health as health_route
 from api.routes import validate as validate_route
 
@@ -46,6 +47,7 @@ app.include_router(validate_route.router, prefix="/api")
 app.include_router(health_route.router, prefix="/api")
 app.include_router(config_route.router, prefix="/api")
 app.include_router(feedback_route.router, prefix="/api")
+app.include_router(ontology_route.router, prefix="/api")
 
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="static")

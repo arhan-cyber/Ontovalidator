@@ -1,6 +1,6 @@
 """Pydantic request/response models for the FastAPI wrapper."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -168,3 +168,44 @@ class ConfigResponse(BaseModel):
     backend_status: BackendStatusOut
     available_embedding_models: List[str]
     available_svo_extractors: List[str]
+
+
+# --- Ontology compliance ---------------------------------------------------
+
+
+class OntologyValidateRequest(BaseModel):
+    plane: Literal["a", "b", "both"] = "both"
+    ontology_path: Optional[str] = None
+    metamodel_path: Optional[str] = None
+    documents_path: Optional[str] = None
+    claim_kinds: Optional[List[str]] = None
+    severity_threshold: Optional[Literal["error", "warning", "info"]] = None
+    include_it4it: bool = False
+    top_k: int = Field(default=5, ge=1, le=50)
+
+
+class ConflictResolveRequest(BaseModel):
+    status: Literal["open", "ontology_defect", "metamodel_gap", "accepted_exception"]
+    note: Optional[str] = None
+    resolved_by: Optional[str] = None
+
+
+class OntologyNodeSchema(BaseModel):
+    id: str
+    meta_class: str
+    types: List[str]
+    description: str
+    next_pointer: List[str]
+
+
+class OntologyEdgeSchema(BaseModel):
+    source: str
+    target: str
+    type: str
+    key: str
+
+
+class OntologyGraphResponse(BaseModel):
+    version: str
+    nodes: List[OntologyNodeSchema]
+    edges: List[OntologyEdgeSchema]
