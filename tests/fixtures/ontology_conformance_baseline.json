@@ -1,0 +1,967 @@
+{
+  "_comment": "Frozen conformance baseline. The ontology and meta-model inputs are gitignored, so this fixture is what CI compares against. Regenerate with: python scripts/validate_ontology.py --bless-baseline",
+  "ontology_sha256": "955e6dafdd938630c366d3152ab0f14081e0a7c81cd1f5f20b52134a832fffce",
+  "metamodel_sha256": "99710ff1980b21a095126b52b237387a75319ead351cea52fd16a8891b017e1c",
+  "ontology_version": "2.2",
+  "metamodel_version": "2.1",
+  "total_findings": 134,
+  "by_rule": {
+    "CONSISTENCY-BRANCH-TARGET": 1,
+    "CONSISTENCY-NEXT-POINTER": 1,
+    "GRAMMAR": 6,
+    "ONT-001": 27,
+    "ONT-003": 1,
+    "ONT-005": 3,
+    "ONT-009": 2,
+    "ONT-010": 39,
+    "ONT-012": 1,
+    "ONT-013": 45,
+    "ONT-013-VOCAB": 7,
+    "RULESET-SKEW": 1
+  },
+  "by_severity": {
+    "error": 57,
+    "warning": 76,
+    "info": 1
+  },
+  "findings": [
+    {
+      "rule_id": "CONSISTENCY-BRANCH-TARGET",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "is major incident ?#branch[1]",
+      "degraded": false
+    },
+    {
+      "rule_id": "CONSISTENCY-NEXT-POINTER",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Escalation",
+      "degraded": false
+    },
+    {
+      "rule_id": "GRAMMAR",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Configuration Data|connects_to_info|Configuration",
+      "degraded": false
+    },
+    {
+      "rule_id": "GRAMMAR",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Handle Duplicate Event|leads_to|Skip",
+      "degraded": false
+    },
+    {
+      "rule_id": "GRAMMAR",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Log Monitor|executes_via|Cloud Logging",
+      "degraded": false
+    },
+    {
+      "rule_id": "GRAMMAR",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Operations|decomposes_into|Business Service",
+      "degraded": false
+    },
+    {
+      "rule_id": "GRAMMAR",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Runbook Activity|executes_via|Runbook",
+      "degraded": false
+    },
+    {
+      "rule_id": "GRAMMAR",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Service Monitor|executes_via|Cloud Watch",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Assure",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Check Knowledge",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Check Service Configuration",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Classification & Prioritization",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Detect & Log Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Detect to Correct",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Escalation",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Event Filtering",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Event Management",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Get Configuration Details",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Getting Configuration Information",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Handle Duplicate Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Incident Detecting & Recording",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Incident Management",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Investigation and Diagnosis",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Log Monitor",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Monitoring",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Operations",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Resolution & Recovery",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Resolve Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Runbook Activity",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Service Monitor",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Support",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Major Incident Manager",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Service Desk",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Support Group Manager",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-001",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Technical Support Team",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-003",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "reason ?",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-005",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Log Monitor|executes_via|Cloud Logging",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-005",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Runbook Activity|executes_via|Runbook",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-005",
+      "severity": "error",
+      "subject_kind": "edge",
+      "subject_id": "Service Monitor|executes_via|Cloud Watch",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-009",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "escalation decision?",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-009",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "reason ?",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Assure",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Business Service",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Check Knowledge",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Check Service Configuration",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Classification & Prioritization",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Close Event",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Compare Event Filtering Policy",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Create Event",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Define Priority",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Detect & Log Event",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Detect to Correct",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Escalation",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Event Filtering",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Event Management",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Examine Event Context",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Generate Incident",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Get Configuration Details",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Getting Configuration Information",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Incident Closure",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Incident Detecting & Recording",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Incident Management",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Investigation and Diagnosis",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Log Monitor",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Logging Event",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Major Incident Management",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Monitoring",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Operations",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Resolution & Recovery",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Resolve Event",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Runbook Activity",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Service Monitor",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Skip",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Support",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate knowledge to L1 Support",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Major Incident Manager",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Service Desk",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Support Group Manager",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Technical Support Team",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-010",
+      "severity": "warning",
+      "subject_kind": "node",
+      "subject_id": "Update Throttling Counter",
+      "degraded": true
+    },
+    {
+      "rule_id": "ONT-012",
+      "severity": "warning",
+      "subject_kind": "edge",
+      "subject_id": "Check Knowledge|executes_via|Enterprise Knowledge",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "API Endpoint",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Assignment Group",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Business Criticality",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Business Owner",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Check Knowledge",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Check Service Configuration",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Create Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Detect & Log Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Detect to Correct",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Enterprise Knowledge",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Escalation",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Examine Event Context",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Generate Incident",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Get Configuration Details",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Handle Duplicate Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Impact",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Incident Closure",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Incident Detecting & Recording",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Incident Management",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "KEDB",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "KPI",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Log Monitor",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Logging Event",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Platform CI's",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Resolution",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Resolution & Recovery",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Response",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Runbook",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Runbook Activity",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "SLA Target",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Service Contract",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Service Level",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Service Monitor",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Skip",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Supported Hours",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Syndicate knowledge to L1 Support",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Major Incident Manager",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Service Desk",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Support Group Manager",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Syndicate to Technical Support Team",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Update Throttling Counter",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "Urgency",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "escalation decision?",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "found in knowledge ?",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013",
+      "severity": "error",
+      "subject_kind": "node",
+      "subject_id": "reason ?",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "append_payload",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "conditional_set",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "evaluate_decision",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "extract_and_append",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "fill_missing_value",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "halt",
+      "degraded": false
+    },
+    {
+      "rule_id": "ONT-013-VOCAB",
+      "severity": "warning",
+      "subject_kind": "graph",
+      "subject_id": "traverse_dynamic",
+      "degraded": false
+    },
+    {
+      "rule_id": "RULESET-SKEW",
+      "severity": "info",
+      "subject_kind": "graph",
+      "subject_id": "systemic_rules",
+      "degraded": false
+    }
+  ]
+}
