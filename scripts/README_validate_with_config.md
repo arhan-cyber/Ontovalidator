@@ -2,6 +2,16 @@
 
 Quick bash script to validate SVO triples against documents with configurable concept extraction.
 
+## Installation (one-time setup)
+
+```bash
+cd ~/ontovalidator
+pip install -r requirements-api.txt -r requirements-ml.txt
+# Optional production backends (Elasticsearch/Neo4j/Milvus):
+pip install -r requirements-production.txt
+chmod +x scripts/validate_with_config.sh
+```
+
 ## Quick Start
 
 ### 1. Fast validation (default: mock extractors, no GPU needed)
@@ -182,8 +192,47 @@ malaria_paper.txt,Malaria,spreads_via,mosquitoes
 diabetes_paper.txt,insulin,regulates,blood_glucose
 ```
 
+## Performance Cheat Sheet
+
+| Config | Concept Extraction | Embeddings | Speed | Quality | GPU |
+|--------|-------------------|-----------|-------|---------|-----|
+| Mock (default) | Verb-phrase heuristic | 5-dim hash | ~1s | Baseline | No |
+| T5-small | LLM-based | 5-dim hash | ~2s | Good | Optional |
+| T5-base | LLM-based | 5-dim hash | ~5s | Better | Recommended |
+| T5-large | LLM-based | 5-dim hash | ~10s | Best | Required |
+| T5-large + Emb | LLM-based | DistilBERT | ~15s | Excellent | Required |
+
+## Advanced: Direct Python API
+
+If you need more control than the script offers, use Python directly:
+
+```python
+from src.config import PipelineConfig, BackendMode
+from src.factories import EngineFactory
+from src.models import OntologyAssertion
+
+config = PipelineConfig(
+    backend_mode=BackendMode.PRODUCTION,
+    sqlite_path="my_data.db",
+    concept_extractor_name="transformer",
+    concept_extractor_model_name="google/flan-t5-base",
+)
+engine = EngineFactory.create_verification_engine(config)
+
+assertion = OntologyAssertion(
+    assertion_id="test_1", subject="COVID-19", relation="causes", object="pneumonia",
+)
+verdict = engine.adjudicate_triple(
+    document_text=open("paper.txt").read(),
+    assertion=assertion,
+    top_k=10,
+)
+print(f"Verdict: {verdict.label}  Score: {verdict.score}")
+```
+
 ## See Also
 
 - Main validation script: `scripts/validate_triples.py`
 - Pipeline architecture: `README.md`
+- Full production run (real backends, no mocks): `docs/FULL_PRODUCTION_RUN.md`
 - Development roadmap: `TODO.md`

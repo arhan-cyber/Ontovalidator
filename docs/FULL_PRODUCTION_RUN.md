@@ -5,23 +5,24 @@ real Elasticsearch (lexical), real Milvus (semantic), real Neo4j (graph), transf
 models throughout (embedding, SVO extraction, concept extraction, validation, evidence
 classification, evidence judging), the FastAPI backend, and the frontend.
 
-**Note:** `docs/PRODUCTION_DEPLOYMENT.md` and `.env.example` at the repo root use env
-var names (`ELASTICSEARCH_ENABLED`, `NEO4J_URI`, `SQLITE_DB_PATH`, etc.) that do not
-match what `src/config.py` actually reads. Do not use them as a source of truth — this
-document was verified directly against `src/config.py` and `src/factories.py`.
+**Note:** `archive/docs/PRODUCTION_DEPLOYMENT.md` (archived — superseded by this
+document) and `.env.example` at the repo root use env var names
+(`ELASTICSEARCH_ENABLED`, `NEO4J_URI`, `SQLITE_DB_PATH`, etc.) that do not match what
+`src/config.py` actually reads. Do not use them as a source of truth — this document
+was verified directly against `src/config.py` and `src/factories.py`.
 
 ## 1. Install dependencies
 
 ```bash
-pip install -r requirements-api.txt -r requirements-ml.txt
-pip install elasticsearch neo4j pymilvus sentencepiece
+pip install -r requirements-api.txt -r requirements-ml.txt -r requirements-production.txt
 ```
 
-`elasticsearch`, `neo4j`, and `pymilvus` are imported directly in `src/helpers/` but are
-not listed in any `requirements*.txt` — they must be installed separately. `sentencepiece`
-is required by the Flan-T5 tokenizer used for SVO/concept extraction
-(`TransformerSVOExtractor`, `TransformerConceptExtractor`); without it those two
-extractors will silently fall back to their mock implementations.
+`requirements-production.txt` covers `elasticsearch`, `neo4j`, and `pymilvus` — imported
+directly in `src/helpers/` but only needed when a production backend is actually enabled
+(`ONTO_ES_ENABLED`/`ONTO_NEO4J_ENABLED`/`ONTO_MILVUS_ENABLED`). `sentencepiece`, required
+by the Flan-T5 tokenizer used for SVO/concept extraction (`TransformerSVOExtractor`,
+`TransformerConceptExtractor`), is in `requirements-ml.txt` since it's needed any time a
+transformer-tier extractor is used, not just in production mode.
 
 ## 2. Start backend services
 

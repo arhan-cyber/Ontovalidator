@@ -1,1 +1,0 @@
-import{j as t}from"./index--hg82owT.js";function o({variant:r="primary",loading:n=!1,disabled:e,className:s,children:a,...i}){return t.jsxs("button",{className:`btn btn-${r}${s?` ${s}`:""}`,disabled:e||n,...i,children:[n?t.jsx("span",{className:"spinner","aria-hidden":"true"}):null,a]})}export{o as B};

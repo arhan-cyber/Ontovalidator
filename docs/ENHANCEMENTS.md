@@ -1,6 +1,6 @@
 # Pipeline Enhancements
 
-Reference for the six enhancements from `PLAN-TO-IMPROVE/implementation_plan.md`.
+Reference for the six enhancements from `archive/docs/PLAN-TO-IMPROVE/implementation_plan.md` (all shipped; the plan is kept for historical context).
 Everything below is additive: existing response fields and call signatures are unchanged.
 
 ---

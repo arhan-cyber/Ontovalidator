@@ -1,89 +1,61 @@
-# 📚 SVO Verification Pipeline
+# SVO Verification Pipeline
 
-**A modular, production-ready system for validating Subject-Verb-Object (SVO) triples against documents with multi-modal retrieval, intelligent fusion, and confidence scoring.**
+A modular system for validating Subject-Verb-Object (SVO) triples against source documents, using multi-modal retrieval, score fusion, and LLM-assisted adjudication. Includes a FastAPI backend and a React frontend with an adjustable trace-detail view.
 
----
-
-## ✨ What It Does
+## What it does
 
 Given a raw document and a set of SVO triples, the pipeline:
 
-1. **Ingests** the document (chunks, embeds, extracts triples)
-2. **Retrieves** relevant evidence via 3 modalities (lexical, semantic, graph)
-3. **Fuses** scores from multiple sources intelligently
-4. **Adjudicates** each triple against retrieved evidence
-5. **Returns** for each triple:
-   - **Label**: `supported` | `contradicted` | `partial` | `unknown`
-   - **Score**: 0.0 - 1.0 confidence
-   - **Evidence**: Relevant chunks with retrieval source
-   - **Rationale**: Human-readable explanation
-
-### Example
+1. **Ingests** the document (chunks it, embeds each chunk, extracts SVOs and concepts).
+2. **Retrieves** relevant evidence via three retrievers — lexical, semantic, graph — gated by a query router (`MoERouter`).
+3. **Fuses** the three retrievers' scores into one ranked list.
+4. **Adjudicates** each triple against the retrieved evidence, with an LM judge available for uncertain/conflicting cases.
+5. **Returns**, per triple: a label (`supported` / `contradicted` / `partial` / `unknown`), a 0–1 confidence score, the evidence chunks with retrieval provenance, and a human-readable rationale.
 
 ```python
-from src.engine import SVOVerificationEngine
-from src.models import OntologyAssertion
-
-# Setup (once)
-engine = SVOVerificationEngine(...)
-
-# One call: ingest + validate all triples
 result = engine.validate_triples_batch(
     document_id="my_paper",
-    raw_text="Aspirin treats headache. Aspirin reduces fever. Does not treat malaria.",
+    raw_text="Aspirin treats headache. Aspirin reduces fever. It does not treat malaria.",
     triples=[
         OntologyAssertion(assertion_id="t1", subject="Aspirin", relation="treats", object="headache"),
         OntologyAssertion(assertion_id="t2", subject="Aspirin", relation="treats", object="malaria"),
-    ]
+    ],
 )
-
-# Output:
-# t1: label="supported", score=0.95, evidence=[chunk1], rationale="Direct match..."
-# t2: label="contradicted", score=0.9, evidence=[chunk2], rationale="Negation found..."
+# t1: label="supported",    score=0.95
+# t2: label="contradicted", score=0.90
 ```
 
----
+## Quick start
 
-## 🚀 Quick Start
-
-### Installation
+### Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/arhan-cyber/Ontovalidator.git
-cd Ontovalidator
-
-# Install dependencies (if needed)
-pip install transformers torch  # for TransformerValidator (optional)
+pip install -r requirements-api.txt -r requirements-ml.txt
+# Optional, only if you're enabling real Elasticsearch/Neo4j/Milvus backends:
+pip install -r requirements-production.txt
 ```
 
-### CLI Usage
+Copy `.env.example` to `.env` and adjust — every variable there maps directly to a field `PipelineConfig.load_from_env()` reads in `src/config.py`, which is the source of truth if the two ever drift.
+
+### CLI
 
 ```bash
 python scripts/validate_triples.py \
   --text "Aspirin treats headache and reduces fever." \
   --triple "Aspirin|treats|headache" \
-  --triple "Aspirin|reduces|fever" \
   --triple "Aspirin|treats|malaria" \
   --top-k 5
 ```
 
-**Output:**
-```
-Verdict Summary:
-  [+] Supported: 2
-  [-] Contradicted: 0
-  [~] Partial: 1
-  [?] Unknown: 0
-  Average Score: 0.82
+### HTTP API + frontend
 
-Detailed Verdicts:
-[+] t1: Aspirin treats headache
-  Label: supported
-  Score: 1.000
-  Rationale: The triple is supported by chunk X with direct subject, relation, and object matches.
-  Evidence (1 chunks): ...
+```bash
+uvicorn api.app:app --host 0.0.0.0 --port 8000
 ```
+
+`POST /api/validate` takes `{document_id, raw_text, triples, top_k}` and returns the same verdict shape as the Python API below. See `docs/FULL_PRODUCTION_RUN.md` for a fully-verified walkthrough with real backends and transformer models end to end.
+
+The React SPA (`frontend/`) is a separate build — see `frontend/README.md` for setup. Once built (`npm run build`), `api/app.py` serves it directly from `frontend/dist/`, so `GET /` gives you the full UI, including a trace-detail toggle (Verdict → Summary → Detailed → Full trace) for controlling how much of each verdict's retrieval/scoring internals are shown.
 
 ### Python API
 
@@ -96,18 +68,16 @@ from src.storage import SQLiteChunkStore
 from src.validation import MinimalValidator
 from src.models import OntologyAssertion
 
-# Create engine
 engine = SVOVerificationEngine(
     router=MoERouter(),
-    lexical_store=SQLiteLexicalRetriever("data/demo.db"),
-    semantic_store=SQLiteSemanticRetriever("data/demo.db"),
-    graph_store=SQLiteGraphRetriever("data/demo.db"),
+    lexical_store=SQLiteLexicalRetriever("svo_data.db"),
+    semantic_store=SQLiteSemanticRetriever("svo_data.db"),
+    graph_store=SQLiteGraphRetriever("svo_data.db"),
     fusion_engine=WeightedFusionEngine(),
-    chunk_store=SQLiteChunkStore("data/demo.db"),
+    chunk_store=SQLiteChunkStore("svo_data.db"),
     validator=MinimalValidator(),
 )
 
-# Validate triples
 result = engine.validate_triples_batch(
     document_id="doc1",
     raw_text="Aspirin treats headache. Aspirin reduces fever.",
@@ -115,452 +85,128 @@ result = engine.validate_triples_batch(
         OntologyAssertion(assertion_id="t1", subject="Aspirin", relation="treats", object="headache"),
         OntologyAssertion(assertion_id="t2", subject="Aspirin", relation="reduces", object="fever"),
     ],
-    top_k=5
+    top_k=5,
 )
 
-# Access results
 for verdict in result["verdicts"]:
     print(f"{verdict['subject']} {verdict['relation']} {verdict['object']}")
-    print(f"  Label: {verdict['label']}")
-    print(f"  Score: {verdict['score']:.3f}")
-    print(f"  Rationale: {verdict['rationale']}")
-    print(f"  Evidence: {len(verdict['evidence'])} chunks")
+    print(f"  {verdict['label']} (score {verdict['score']:.3f}): {verdict['rationale']}")
 ```
 
----
+Prefer `SVOVerificationEngine.from_config(PipelineConfig(...))` over constructing every component by hand — see `src/factories.py`.
 
-## 🏗️ Architecture
-
-### Pipeline Stages
+## Architecture
 
 ```
-┌─ INGESTION ────────────────────────────────────┐
-│ Document → Chunks → Embeddings → SVOs → Store │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│ ROUTING: Decide which retrievers to invoke      │
-└──────────────────────┬──────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-   ┌────▼─────┐  ┌────▼─────┐  ┌────▼─────┐
-   │ Lexical  │  │ Semantic │  │  Graph   │
-   │Retriever │  │Retriever │  │Retriever │
-   └────┬─────┘  └────┬─────┘  └────┬─────┘
-        │              │              │
-        └──────────────┼──────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│ FUSION: Combine scores from 3 sources           │
-│ (weighted: 0.3×lex + 0.5×sem + 0.2×graph)      │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│ MATERIALIZATION: Load chunk content from SQLite │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│ ADJUDICATION: Match triple to evidence          │
-│ (detect: subject ∈ text, relation ∈ text, ...) │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│ VERDICT: Compute score + label + rationale      │
-└──────────────────────┬──────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────┐
-│ OUTPUT: JSON with all verdicts + summary        │
-└─────────────────────────────────────────────────┘
+INGESTION: Document -> Chunks -> Embeddings -> SVOs/concepts -> SQLite (+ ES/Milvus/Neo4j)
+    |
+ROUTING: MoERouter classifies the query, gates which of the 3 retrievers run
+    |
+    +-------------+-------------+
+    |             |             |
+ LEXICAL      SEMANTIC        GRAPH
+    |             |             |
+    +-------------+-------------+
+    |
+FUSION: 0.3*lexical + 0.5*semantic + 0.2*graph, +0.1 per corroborating source
+    |
+MATERIALIZATION: load full chunk content for the fused top-k
+    |
+ADJUDICATION: classify each chunk as supports/refutes/partial/unknown for the triple,
+              LM judge resolves uncertain/conflicting cases
+    |
+VERDICT: score + label + rationale + evidence
 ```
 
-### Multi-Modal Retrieval
+Full Mermaid diagram: `pipeline_wireframe.md`.
 
-Three complementary retrieval strategies work in parallel:
+### The three retrievers
 
-| Modality | How It Works | Best For |
-|----------|-------------|----------|
-| **Lexical** | BM25 token overlap | Exact keyword matches |
-| **Semantic** | Dense vector similarity | Conceptual/paraphrased matches |
-| **Graph** | Multi-hop concept traversal | Complex multi-step reasoning |
+Each has a SQLite-backed "demo tier" (zero external dependencies) and a production-backend tier:
 
-Results are **intelligently fused** with cross-source boosting to encourage agreement.
+| Retriever | Demo tier (SQLite) | Production tier |
+|---|---|---|
+| Lexical | Token-overlap count | Elasticsearch (BM25) |
+| Semantic | Jaccard similarity on token sets | Milvus (dense vector ANN) |
+| Graph | BFS over `provides`/`depends_on` concept edges, 0.8 decay/hop, 3-hop limit | Neo4j (Cypher multi-hop) |
 
-### Data Flow
+The demo tier's "semantic" retriever is lexical (Jaccard on tokens), not embedding-based — it won't catch paraphrases the way the production Milvus tier will. Retrieval is scoped to one `document_id` at a time; only the corpus-wide `verify_with_ontology` API intentionally searches across all ingested documents.
 
-```
-Document Text
-    ↓
-[Chunker] → Sentences/phrases
-    ↓
-[Embedding Model] → Dense vectors
-    ↓
-[SVO Extractor] → Subject-Verb-Object triples
-    ↓
-[Multi-Store] → SQLite + Elasticsearch + Milvus + Neo4j
-    ↓
-[Retrieval] → Chunks matching query
-    ↓
-[Fusion] → Single ranked list
-    ↓
-[Validator] → Evidence type + confidence
-    ↓
-[Output] → Label + Score + Rationale + Evidence
-```
+### Model tiers
 
----
+`ONTO_EMBEDDING_MODEL` / `ONTO_SVO_EXTRACTOR` / `ONTO_CONCEPT_EXTRACTOR` each select between a zero-dependency mock/heuristic implementation and a transformer-backed one (DistilBERT for embeddings, flan-t5 for SVO/concept extraction, few-shot prompted). `TransformerSVOExtractor` falls back to the heuristic extractor whenever the model's output doesn't parse into a clean triple, so it's never silently empty-handed.
 
-## 📁 Project Structure
+## Project structure
 
 ```
 Ontovalidator/
-├── src/                          # Main codebase
-│   ├── __init__.py              # Public API exports
-│   ├── models.py                # Dataclasses (Chunk, SVORelation, TripleVerdict, etc.)
-│   ├── engine.py                # Main orchestrator (SVOVerificationEngine)
-│   ├── routing/                 # Query routing
-│   │   ├── __init__.py
-│   │   └── router.py            # MoERouter (Mixture of Experts)
-│   ├── retrieval/               # Three retrieval modalities
-│   │   ├── __init__.py
-│   │   ├── base.py              # BaseRetriever interface
-│   │   ├── lexical.py           # LexicalRetriever (BM25)
-│   │   ├── semantic.py          # SemanticRetriever (Vector similarity)
-│   │   └── graph.py             # GraphRetriever (Multi-hop traversal)
-│   ├── fusion/                  # Score combination
-│   │   ├── __init__.py
-│   │   └── engine.py            # WeightedFusionEngine
-│   ├── storage/                 # Data persistence
-│   │   ├── __init__.py
-│   │   └── chunk_store.py       # SQLiteChunkStore (late materialization)
-│   ├── validation/              # Evidence validators
-│   │   ├── __init__.py
-│   │   ├── validator.py         # MinimalValidator, TransformerValidator
-│   │   └── ontology.py          # OntologyViolationValidator
-│   ├── ingestion/               # Document ingestion
-│   │   ├── __init__.py
-│   │   ├── pipeline.py          # DataIngestor
-│   │   ├── extractors.py        # MockSVOExtractor, MockConceptExtractor
-│   │   └── embeddings.py        # SimpleEmbeddingModel, TransformerEmbeddingModel
-│   ├── classification/          # Triple classification
-│   │   ├── __init__.py
-│   │   ├── triple_classifier.py # HeuristicTripleClassifier, PromptTripleClassifier
-│   │   └── dataset.py           # TripleDatasetWriter (for training data export)
-│   └── helpers/                 # Database helpers
-│       ├── __init__.py
-│       ├── neo4j.py             # Neo4j connection
-│       ├── milvus.py            # Milvus connection
-│       └── elasticsearch.py     # Elasticsearch connection
-├── scripts/                      # Executable scripts
-│   ├── run_demo.py              # Basic demo (ingestion + verification)
-│   ├── validate_triples.py      # Triple validation (YOUR USE CASE)
-│   └── export_training_data.py  # Export adjudications as JSONL
-├── tests/                        # Test suite
-│   ├── conftest.py              # Pytest fixtures
-│   └── test_integration.py       # Integration tests
-├── examples/                     # Usage examples (placeholder)
-├── data/                         # Demo databases
-├── _archived_old_scripts/        # Old code (preserved for reference)
-├── PIPELINE_STATUS.md           # Complete pipeline documentation
-├── PIPELINE_DEEP_DIVE.md        # Technical walkthrough
-├── REFACTORING.md               # Restructuring details
-├── QUICKSTART.md                # Quick start guide
-├── README.md                    # This file
-└── docker-compose.yml           # Optional: Neo4j + Elasticsearch services
+├── src/                   # Core library
+│   ├── engine.py          # SVOVerificationEngine - main orchestrator
+│   ├── factories.py       # EngineFactory - builds an engine from PipelineConfig
+│   ├── config.py          # PipelineConfig, env var loading
+│   ├── routing/           # MoERouter (query -> which retrievers to run)
+│   ├── retrieval/         # Lexical / semantic / graph retrievers + fusion
+│   ├── fusion/             # WeightedFusionEngine
+│   ├── storage/           # SQLiteChunkStore, shared sqlite connection helper
+│   ├── validation/         # MinimalValidator, TransformerValidator
+│   ├── ingestion/         # Chunking, embedding, SVO/concept extraction
+│   ├── classification/    # Evidence-span classifiers, evidence judges
+│   ├── cache/              # Embedding/retrieval/verdict caching
+│   ├── feedback/           # Correction recording + analysis
+│   └── helpers/            # Elasticsearch/Milvus/Neo4j client helpers
+├── api/                    # FastAPI app (routes, schemas, dependency-injected engine pool)
+├── frontend/                # React SPA (see frontend/README.md)
+├── scripts/                 # CLI entry points
+│   └── diagnostics/         # Ad hoc diagnostic scripts (not the pytest suite)
+├── tests/                   # pytest suite (tests/api/, tests/integration/)
+├── docs/                    # Living reference docs (ENHANCEMENTS.md, FULL_PRODUCTION_RUN.md)
+├── archive/                  # Superseded code and historical planning docs, kept for reference
+├── ASSUMPTIONS/              # Documented design assumptions and reasoning tradeoffs
+├── examples/                 # Sample input documents
+└── docker-compose.yml         # Neo4j + Elasticsearch (no Milvus - see docs/FULL_PRODUCTION_RUN.md)
 ```
 
----
+## Configuration
 
-## 🎯 Key Features
+All configuration is environment-variable driven (`ONTO_*` prefix) — see `.env.example` for the common ones and `src/config.py`'s `load_from_env()` for the complete, authoritative list. Key ones:
 
-### ✅ Multi-Modal Retrieval
-- **Lexical**: BM25 keyword matching (Elasticsearch or SQLite)
-- **Semantic**: Dense vector similarity (Milvus or SQLite)
-- **Graph**: Multi-hop concept traversal (Neo4j or SQLite)
+| Variable | Values | Effect |
+|---|---|---|
+| `ONTO_BACKEND_MODE` | `demo` / `production` / `auto` | Whether to use SQLite-only or real backends |
+| `ONTO_EMBEDDING_MODEL` | `simple` / `transformer` | 5-dim hash vs. DistilBERT |
+| `ONTO_SVO_EXTRACTOR` | `mock` / `transformer` | Verb-phrase heuristic vs. few-shot flan-t5 |
+| `ONTO_ENABLE_QUERY_ROUTING` | `true` / `false` | Whether the router actually gates retrievers, or all 3 always run |
+| `ONTO_ENABLE_LM_JUDGE` | `true` / `false` | Whether an LM judge can override the heuristic verdict on uncertain evidence |
 
-### ✅ Intelligent Score Fusion
-- Normalize scores from each modality
-- Weighted combination: 0.3×lexical + 0.5×semantic + 0.2×graph
-- Cross-source boost: +0.1 for each additional source
+## Documentation
 
-### ✅ Negation Detection
-- Detects refutation: "does not treat", "never", "without", etc.
-- Classifies evidence as: supports, refutes, partial, unknown
+| Doc | Purpose |
+|---|---|
+| `README.md` | This file — overview and quick start |
+| `TODO.md` | Living roadmap — what's done, what's deferred, and why |
+| `pipeline_wireframe.md` | Pipeline stages as a Mermaid diagram |
+| `docs/FULL_PRODUCTION_RUN.md` | Verified end-to-end guide with real backends and transformer models |
+| `docs/ENHANCEMENTS.md` | Reference for the shipped observability/scoring enhancements |
+| `frontend/README.md` | Frontend setup, build, and the trace-detail toggle |
+| `scripts/README_validate_with_config.md` | Remote-server CLI workflow for configurable-tier validation |
+| `ASSUMPTIONS/` | Documented design assumptions and LM-reasoning tradeoffs |
+| `archive/` | Superseded code and completed implementation plans, kept for historical reference |
 
-### ✅ Confidence Scoring
-- Formula-based approach (not just binary yes/no)
-- Score range: 0.0 (completely unsupported) to 1.0 (fully supported)
-- Aggregates evidence from multiple chunks
-
-### ✅ Evidence Attribution
-- Each evidence chunk linked to retrieval source
-- Shows which modality found which chunk
-- Text snippet + score + match type
-
-### ✅ Rationale Generation
-- Explains WHY each verdict was reached
-- E.g., "Supported by chunk X with direct subject, relation, and object matches"
-- Rationale changes based on evidence category
-
-### ✅ Batch Processing
-- Validate multiple triples in one call
-- Summary statistics (total/supported/contradicted/partial/unknown)
-- Average confidence score
-
-### ✅ Modular Architecture
-- Easy to swap components (validators, retrievers, routing)
-- Clean interfaces (ABC + dataclasses)
-- No monolithic files
-
-### ✅ CPU-Only Demo Mode
-- Works without GPU
-- Uses mock components (SimpleEmbeddingModel, SQLite fallbacks)
-- Can upgrade to GPU-accelerated versions later
-
----
-
-## 💻 Usage Examples
-
-### Example 1: Simple Validation
-
-```python
-from src.engine import SVOVerificationEngine
-from src.routing import MoERouter
-from src.retrieval import SQLiteLexicalRetriever, SQLiteSemanticRetriever, SQLiteGraphRetriever
-from src.fusion import WeightedFusionEngine
-from src.storage import SQLiteChunkStore
-from src.validation import MinimalValidator
-from src.models import OntologyAssertion
-
-# Setup
-engine = SVOVerificationEngine(
-    router=MoERouter(),
-    lexical_store=SQLiteLexicalRetriever("data/test.db"),
-    semantic_store=SQLiteSemanticRetriever("data/test.db"),
-    graph_store=SQLiteGraphRetriever("data/test.db"),
-    fusion_engine=WeightedFusionEngine(),
-    chunk_store=SQLiteChunkStore("data/test.db"),
-    validator=MinimalValidator(),
-)
-
-# Validate
-result = engine.validate_triples_batch(
-    document_id="doc1",
-    raw_text="Aspirin treats headache.",
-    triples=[
-        OntologyAssertion(assertion_id="t1", subject="Aspirin", relation="treats", object="headache"),
-    ]
-)
-
-print(result["verdicts"][0])
-# {
-#   "assertion_id": "t1",
-#   "label": "supported",
-#   "score": 0.95,
-#   "evidence": [...]
-# }
-```
-
-### Example 2: Use TransformerValidator for NLI
-
-```python
-from src.validation import TransformerValidator
-
-engine = SVOVerificationEngine(
-    ...,
-    validator=TransformerValidator(),  # Uses DistilBERT zero-shot NLI
-)
-
-result = engine.validate_triples_batch(...)
-```
-
-### Example 3: Single Triple Adjudication
-
-```python
-# Validate a single triple
-verdict = engine.adjudicate_triple(
-    document_text=None,  # Already ingested
-    assertion=OntologyAssertion(...),
-    top_k=5
-)
-
-print(f"Label: {verdict.label}")
-print(f"Score: {verdict.score}")
-print(f"Evidence chunks: {len(verdict.evidence)}")
-```
-
-### Example 4: Export Training Data
+## Testing
 
 ```bash
-python scripts/export_training_data.py \
-  --db-path data/demo.db \
-  --out training.jsonl \
-  --assertion "Aspirin|treats|headache|must_hold" \
-  --assertion "Aspirin|treats|malaria|must_hold"
+pytest tests/ -q
 ```
 
----
+`tests/api/` covers FastAPI routes against a stubbed engine pool; `tests/integration/` builds a real `SVOVerificationEngine`/`EngineFactory` end to end; the rest of `tests/` covers individual components in isolation.
 
-## 📊 Pipeline Statistics
+## Contributing
 
-### Scoring Formula
+1. Branch from `main`.
+2. Make your changes; add tests alongside them.
+3. Run `pytest tests/ -q` before committing.
+4. Open a PR with a clear description of the change and why.
 
-```
-score = 0.2 
-      + 0.6 × sum(support_confidence)
-      + 0.15 × sum(partial_confidence)
-      + 0.08 × agreement_bonus
-      - 0.55 × sum(refute_confidence)
+## License
 
-Then clip to [0, 1]
-```
-
-### Label Determination
-
-| Condition | Label |
-|-----------|-------|
-| refute_strength >> support_strength AND refute_strength ≥ 0.6 | `contradicted` |
-| support_strength ≥ 0.7 AND refute_strength == 0 | `supported` |
-| support_strength > 0 OR partial_strength > 0 | `partial` |
-| Otherwise | `unknown` |
-
----
-
-## 🔧 Configuration
-
-### Run Modes
-
-#### Demo Mode (Default)
-```python
-from src.ingestion import run_demo
-
-result = run_demo(
-    db_path="data/demo.db",
-    raw_text="Your document",
-    run_mode="demo"  # Uses SQLite fallbacks for all retrievers
-)
-```
-
-#### Full Mode (Requires external services)
-```python
-result = run_demo(
-    db_path="data/demo.db",
-    raw_text="Your document",
-    run_mode="full"  # Attempts to use ES, Milvus, Neo4j
-)
-```
-
-### Using Different Validators
-
-```python
-from src.validation import MinimalValidator, TransformerValidator
-
-# Lightweight (just returns ranked chunks)
-validator = MinimalValidator()
-
-# Zero-shot NLI (requires transformers library)
-validator = TransformerValidator("typeform/distilbert-base-uncased-mnli")
-```
-
-### Using Different Embeddings
-
-```python
-from src.ingestion import SimpleEmbeddingModel, TransformerEmbeddingModel
-
-# Mock embedding (5-dim hash-based, no deps)
-embedding = SimpleEmbeddingModel()
-
-# Real embedding (DistilBERT, CPU-friendly)
-embedding = TransformerEmbeddingModel("distilbert-base-uncased")
-```
-
----
-
-## 📚 Documentation
-
-| Document | Purpose |
-|----------|---------|
-| **README.md** | This file - project overview |
-| **PIPELINE_STATUS.md** | Complete pipeline documentation + usage guide |
-| **PIPELINE_DEEP_DIVE.md** | Technical walkthrough with detailed examples |
-| **QUICKSTART.md** | Quick start guide with module breakdown |
-| **REFACTORING.md** | Project restructuring details |
-
----
-
-## 🧪 Testing
-
-Run the integration tests:
-
-```bash
-python -m pytest tests/test_integration.py -v
-```
-
-Or run the complete pipeline demo:
-
-```bash
-python scripts/validate_triples.py \
-  --text "Sample document text here." \
-  --triple "Subject|relation|object" \
-  --top-k 5
-```
-
----
-
-## 🚀 Next Steps (Optional Enhancements)
-
-These are *not* required for core functionality, but enable production-scale features:
-
-- **LLM-based SVO Extraction**: Replace `MockSVOExtractor` with real LLM
-- **Real Embeddings**: Use `TransformerEmbeddingModel` instead of `SimpleEmbeddingModel`
-- **Milvus Server**: Setup Milvus for scalable vector search
-- **Neo4j Server**: Setup Neo4j for knowledge graph reasoning
-- **Elasticsearch**: Setup ES for production-grade lexical search
-- **REST API**: Wrap engine in FastAPI/Flask server
-- **GPU Acceleration**: Run models on GPU for faster inference
-- **Distributed Processing**: Deploy as microservices
-
----
-
-## 🤝 Contributing
-
-The codebase is modular and well-documented. To contribute:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Commit with clear messages (`git commit -m "feat: add amazing feature"`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
-
----
-
-## 📝 License
-
-This project is provided as-is for research and development purposes.
-
----
-
-## 🔗 Links
-
-- **GitHub**: https://github.com/arhan-cyber/Ontovalidator
-- **Documentation**: See PIPELINE_STATUS.md and PIPELINE_DEEP_DIVE.md
-- **Quick Start**: See QUICKSTART.md
-
----
-
-## ✨ Status
-
-**Version**: 1.0 (Post-Refactoring)  
-**Status**: ✅ Production Ready  
-**Last Updated**: 2026-07-10
-
----
-
-## 📧 Contact
-
-For questions or issues, please refer to the documentation or create an issue on GitHub.
-
----
-
-**Built with modular architecture, comprehensive documentation, and production-ready code.** 🎉
+Provided as-is for research and development purposes.
